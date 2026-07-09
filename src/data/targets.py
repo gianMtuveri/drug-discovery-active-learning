@@ -53,3 +53,21 @@ def load_target_descriptors(target, base_dir="data/processed/targets"):
         raise FileNotFoundError(f"Missing descriptor file: {path}")
 
     return pd.read_parquet(path)
+
+
+def load_target_regression(target, base_dir="data/processed/targets"):
+    target_dir = get_target_dir(target, base_dir)
+
+    X_path = target_dir / "X_morgan.npz"
+    y_path = target_dir / "affinity.npy"
+
+    if not X_path.exists():
+        raise FileNotFoundError(f"Missing feature file: {X_path}")
+
+    if not y_path.exists():
+        raise FileNotFoundError(f"Missing regression target file: {y_path}")
+
+    X = np.load(X_path)["X"]
+    y = np.load(y_path)
+
+    return X, y

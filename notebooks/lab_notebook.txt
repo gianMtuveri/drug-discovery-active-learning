@@ -1036,7 +1036,8 @@ Entry 13 — Target-Specific Threshold Calibration
 Objective
 Make classification benchmarks more comparable across targets.
 
-A fixed activity threshold, such as 1000 nM, does not produce equivalent classification problems for different proteins. Some targets become highly active-biased, while others remain more balanced.
+A fixed activity threshold, such as 1000 nM, does not produce equivalent classification problems 
+for different proteins. Some targets become highly active-biased, while others remain more balanced.
 
 Affinity Inspection Step
 A new script was added:
@@ -1120,7 +1121,8 @@ Best ROC AUC ≈ 0.767
 
 JAK2:
 Best ROC AUC ≈ 0.779
-Greedy selection still found the largest number of actives but produced worse ROC AUC, confirming that pure exploitation does not necessarily improve model learning.
+Greedy selection still found the largest number of actives but produced worse ROC AUC, confirming that 
+pure exploitation does not necessarily improve model learning.
 
 Updated Routine
 For every new target, the standard workflow is now:
@@ -1134,9 +1136,11 @@ python scripts/prepare_target.py --target TARGET
 python scripts/run_bindingdb_repeated_simulation.py --target TARGET --seeds 10
 python scripts/plot_bindingdb_classification_panel.py --target TARGET
 Interpretation
-The benchmark is now moving from a fixed-threshold classification problem to a target-calibrated classification framework.
+The benchmark is now moving from a fixed-threshold classification problem to a target-calibrated 
+classification framework.
 
-This improves scientific comparability across biological targets and prevents misleading conclusions caused by target-specific affinity distributions.
+This improves scientific comparability across biological targets and prevents misleading conclusions 
+caused by target-specific affinity distributions.
 
 Next Hypothesis
 After calibrating thresholds, we can more fairly ask:
@@ -1151,19 +1155,69 @@ Milestone: Multi-target BindingDB benchmark completed.
 
 Major developments:
 - Generalized preprocessing to arbitrary BindingDB targets through targets.yaml.
-- Created automatic target preparation pipeline including fingerprints, descriptors, metadata and classification labels.
+- Created automatic target preparation pipeline including fingerprints, descriptors, metadata and 
+classification labels.
 - Added affinity-distribution inspection to calibrate activity thresholds individually for each target.
-- Benchmarked five active-learning strategies (Greedy, Random, Uncertainty Top-K, Uncertainty + Diversity and Query by Committee) on ten pharmacologically distinct targets.
-- Built comparative visualization panel summarizing ROC-AUC, active discovery, descriptor distributions and dataset statistics.
+- Benchmarked five active-learning strategies (Greedy, Random, Uncertainty Top-K, Uncertainty + Diversity 
+and Query by Committee) on ten pharmacologically distinct targets.
+- Built comparative visualization panel summarizing ROC-AUC, active discovery, descriptor distributions 
+and dataset statistics.
 
 Main observations:
 - Greedy consistently maximizes discovered actives but yields the weakest classifiers.
 - Diversity-aware uncertainty sampling is the most consistent acquisition strategy across targets.
 - Random sampling remains a surprisingly competitive baseline after balancing class distributions.
-- Query by Committee offers little benefit with a committee composed of closely related logistic-regression models.
+- Query by Committee offers little benefit with a committee composed of closely related logistic-regression 
+models.
 - Target-specific affinity thresholds are essential for fair cross-target comparisons.
 
 Next objectives:
 - Clean repository and update documentation.
 - Develop regression pipeline for affinity prediction with uncertainty estimation.
 - Investigate Bayesian regression for uncertainty-driven active learning.
+
+
+## Entry 14 — Regression baseline on EGFR
+
+Objective:
+Extend the active-learning framework from binary classification to quantitative affinity regression.
+
+Regression target:
+pAffinity = 9 - log10(affinity_nM)
+
+This transforms affinity values into a logarithmic scale where higher values indicate stronger binding.
+
+Implemented:
+- Added affinity.npy to prepared target folders.
+- Added load_target_regression().
+- Added regression baseline models:
+  - Random Forest Regressor
+  - Gradient Boosting Regressor
+  - Bayesian Ridge
+- Added regression metrics:
+  - RMSE
+  - MAE
+  - R²
+  - Pearson correlation
+  - best test-set pAffinity
+  - top-20 mean pAffinity
+  - top-100 enrichment
+- Added regression diagnostic report.
+
+EGFR Random Forest baseline:
+RMSE: 0.755
+MAE: 0.528
+R²: 0.741
+Pearson r: 0.862
+
+Interpretation:
+The Random Forest baseline captures a substantial fraction of the EGFR affinity landscape. 
+The predicted-vs-experimental plot shows strong agreement, while the residual plot reveals mild 
+regression-to-the-mean behavior. The calibration curve is close to ideal, suggesting that average 
+predicted affinity is well aligned with average experimental affinity. 
+The ranking-quality plot shows that top predicted compounds are strongly enriched in experimentally 
+potent molecules.
+
+Main conclusion:
+Quantitative affinity regression is feasible with the current Morgan fingerprint framework 
+and provides a strong basis for regression-based active learning.
