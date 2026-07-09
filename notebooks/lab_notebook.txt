@@ -1144,3 +1144,26 @@ After calibrating thresholds, we can more fairly ask:
 Does diversity-aware uncertainty consistently improve active learning across different biological targets?
 
 Current evidence from EGFR and JAK2 supports this hypothesis.
+
+09/07/2026
+
+Milestone: Multi-target BindingDB benchmark completed.
+
+Major developments:
+- Generalized preprocessing to arbitrary BindingDB targets through targets.yaml.
+- Created automatic target preparation pipeline including fingerprints, descriptors, metadata and classification labels.
+- Added affinity-distribution inspection to calibrate activity thresholds individually for each target.
+- Benchmarked five active-learning strategies (Greedy, Random, Uncertainty Top-K, Uncertainty + Diversity and Query by Committee) on ten pharmacologically distinct targets.
+- Built comparative visualization panel summarizing ROC-AUC, active discovery, descriptor distributions and dataset statistics.
+
+Main observations:
+- Greedy consistently maximizes discovered actives but yields the weakest classifiers.
+- Diversity-aware uncertainty sampling is the most consistent acquisition strategy across targets.
+- Random sampling remains a surprisingly competitive baseline after balancing class distributions.
+- Query by Committee offers little benefit with a committee composed of closely related logistic-regression models.
+- Target-specific affinity thresholds are essential for fair cross-target comparisons.
+
+Next objectives:
+- Clean repository and update documentation.
+- Develop regression pipeline for affinity prediction with uncertainty estimation.
+- Investigate Bayesian regression for uncertainty-driven active learning.
