@@ -5,7 +5,13 @@ __pycache__/
 
 data/raw/
 data/processed/
-results/
+
+results/*
+!results/figures/
+results/figures/*
+!results/figures/egfr_affinity_distribution.png
+!results/figures/egfr_classification_panel.png
+!results/figures/target_comparison_panel.png
 
 .vscode/
 .ipynb_checkpoints/
