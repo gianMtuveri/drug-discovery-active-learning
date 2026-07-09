@@ -1,0 +1,1146 @@
+Research Notebook
+Project
+
+Active Learning for Drug Discovery
+
+Goal
+Investigate whether active learning strategies can reduce the number of experiments required to build an accurate predictive model for molecular activity.
+
+
+26/06/2026
+
+Entry 0 — Initial hypotheses
+Biological motivation
+
+Experimental assays are expensive.
+
+Given a large library of molecules, only a small fraction can be tested.
+
+Machine learning can guide which molecules should be tested next.
+
+
+Research question
+
+Which active-learning strategy provides the best use of a limited experimental budget?
+
+Initial hypotheses
+Greedy selection should discover more active molecules.
+Uncertainty sampling should build a better predictive model.
+Random sampling should provide a useful baseline.
+
+
+Entry 1 — Simulation design
+Important conceptual distinction
+
+The labels already exist.
+
+The model simply does not know them yet.
+
+When a molecule is selected,
+
+unknown label
+        ↓
+experimental assay
+        ↓
+true label becomes available
+
+The simulation reproduces this process by hiding labels and revealing them only after selection.
+
+
+Experimental workflow
+
+One active-learning round is equivalent to one experimental campaign:
+
+Current labeled molecules
+↓
+Train model
+↓
+Predict unlabeled molecules
+↓
+Choose experiments
+↓
+Reveal true labels
+↓
+Repeat
+
+
+Entry 2 — Selection strategies
+
+We implemented three strategies.
+
+Random
+No model guidance.
+Purpose:
+Baseline.
+
+Greedy
+Choose molecules with the largest P(active)
+Purpose:
+Maximize hit discovery.
+
+Uncertainty
+Choose molecules with P(active) ≈ 0.5
+Purpose:
+Improve the model by labeling molecules close to its decision boundary.
+
+
+Entry 3 — First experiment
+
+Configuration
+
+Toy dataset
+Logistic Regression
+20 initial labeled molecules
+10 molecules selected per round
+10 rounds
+
+Evaluation
+
+ROC AUC on a fixed test set
+Number of active molecules discovered
+Observation
+
+Greedy clearly discovered more active molecules.
+
+Greedy:       97
+
+Random:       62
+
+Uncertainty:  62
+
+This confirmed our first hypothesis.
+
+Unexpected observation:
+
+Random achieved a ROC AUC comparable to, or better than, uncertainty sampling.
+
+This contradicted our initial expectation.
+
+
+Entry 4 — Discussion
+
+Possible explanations
+
+H1
+The initial model is too inaccurate.
+Uncertainty sampling may focus on the wrong region.
+
+H2
+The toy dataset is relatively easy.
+Random exploration already samples enough informative molecules.
+
+H3
+Pure uncertainty oversamples one small region of feature space.
+Random explores a larger fraction of the feature space.
+
+H4
+The observation may simply be due to randomness.
+One simulation is insufficient.
+
+H5
+Pure uncertainty sampling may become trapped near the current decision boundary 
+if the initial labeled dataset poorly represents the feature space.
+Prediction:
+Increasing the diversity of the initial labeled molecules should improve uncertainty sampling.
+
+Next experiments
+
+Repeat the entire simulation across many independent random seeds.
+Measure mean ROC AUC ± standard deviation for each strategy.
+
+Use random initialization to evaluate hypothesis H5.
+
+
+Lessons learned:
+Unexpected results should not immediately be interpreted as implementation bugs. 
+They are hypotheses that require further experiments.
+
+
+
+Entry 5 — Long Simulation (50 Independent Campaigns)
+Objective
+
+Evaluate whether different active-learning strategies produce measurable differences in 
+model performance and hit discovery when averaged across many independent experimental campaigns.
+
+Experimental Design
+
+Dataset
+-Synthetic 2D molecular dataset
+-1000 molecules
+-Binary classification (active/inactive)
+
+Model
+-Logistic Regression
+
+Active-learning setup
+-Initial labeled molecules: 20
+
+Molecules selected per round: 10
+
+Total rounds: 10
+
+Selection strategies
+-Random
+-Greedy (highest predicted probability)
+-Uncertainty (least confident predictions)
+
+Evaluation metrics
+
+-Primary metric: ROC AUC on a fixed held-out test set
+
+-Secondary metric: Number of experimentally discovered active molecules
+
+-Repetitions: 50 independent simulations using different random seeds.
+
+Results
+
+Hit discovery:
+-Greedy overwhelmingly outperformed the other strategies.
+
+Average number of active molecules after 10 rounds:
+
+Strategy	Actives Found
+Greedy	~100
+Random	~63
+Uncertainty	~64
+
+This confirms the expected behavior of an exploitative strategy.
+
+-Model performance
+
+Average ROC AUC after 10 rounds:
+
+Strategy	ROC AUC
+Random	0.819 ± 0.019
+Uncertainty	0.817 ± 0.020
+Greedy	0.805 ± 0.028
+
+Contrary to our initial hypothesis, uncertainty sampling did not substantially outperform random sampling.
+
+The difference between Random and Uncertainty is very small compared to the observed variability.
+
+-Visual Analysis
+
+The 2D visualizations provided an intuitive explanation of the numerical results.
+
+--Greedy
+
+The model rapidly concentrated experiments inside the active region.
+
+Characteristics:
+
+Excellent hit discovery.
+Very limited exploration.
+Quickly exploits its current knowledge.
+
+--Random
+
+Experiments naturally covered the entire feature space.
+
+Characteristics:
+
+Representative sampling of the data distribution.
+Balanced discovery of active and inactive molecules.
+Strong predictive performance despite its simplicity.
+
+--Uncertainty
+
+Experiments concentrated around the current decision boundary.
+
+Characteristics:
+
+Repeated refinement of ambiguous regions.
+Limited exploration outside the current boundary.
+Behaves more like boundary refinement than true exploration.
+
+This visualization substantially changed our interpretation of uncertainty sampling.
+
+Lessons Learned
+Unexpected results should not immediately be interpreted as implementation errors.
+Visualization is essential for understanding active-learning behavior.
+Negative experiments (inactive molecules) are still valuable because they improve the predictive model.
+Different active-learning strategies optimize different objectives:
+Greedy optimizes hit discovery.
+Random builds representative datasets.
+Uncertainty refines the decision boundary.
+
+
+New Hypotheses
+H1 — Initialization Bias ⭐⭐⭐
+
+The performance of active learning depends strongly on the quality of the initial labeled molecules.
+Random initialization may produce an unrepresentative starting dataset, influencing every subsequent
+iteration.
+
+Prediction
+A more diverse initialization should improve uncertainty sampling.
+
+H2 — Sampling Redundancy ⭐⭐
+
+Pure uncertainty sampling repeatedly selects neighboring molecules.
+
+Prediction
+Combining uncertainty with a diversity criterion should improve model performance.
+
+H3 — Dataset Complexity ⭐
+
+The toy dataset may be too simple to reveal the advantages of uncertainty sampling.
+
+Prediction
+More complex datasets will increase the differences between strategies.
+
+H4 — Model Capacity ⭐
+
+Logistic Regression may already learn an almost optimal decision boundary.
+
+Prediction
+More expressive models (e.g., Random Forest or Gradient Boosting) may benefit more from active learning.
+
+
+Immediate Next Step
+
+Investigate the influence of the initial labeled pool.
+
+Implement and compare alternative initialization strategies while keeping:
+
+-the dataset,
+-the classifier,
+-and the active-learning strategy
+
+unchanged.
+
+This isolates the effect of initialization from all other variables.
+
+Project Roadmap
+
+I think we now have a clear roadmap, ordered by scientific importance rather than implementation difficulty.
+
+Phase 1 (Current)
+Initialization strategies ⭐⭐⭐
+
+Question: Does the choice of the initial experimental set influence the effectiveness of active learning?
+
+Compare:
+
+-Random initialization (baseline)
+-Diverse initialization (our first improvement)
+
+Phase 2
+Selection redundancy ⭐⭐
+
+Question: Can uncertainty sampling be improved by explicitly encouraging diversity?
+
+Potential approaches:
+
+-Uncertainty + diversity
+-Clustering
+-Distance-based penalties
+
+Phase 3
+Model complexity ⭐⭐
+
+Question: Does a more expressive machine learning model change the relative performance of the 
+active-learning strategies?
+
+Candidates:
+
+-Random Forest
+-Gradient Boosting
+-XGBoost (optional)
+
+Phase 4
+Real molecular datasets ⭐⭐⭐
+
+Replace the synthetic dataset with molecular fingerprints.
+
+At this stage we will also address:
+
+-scaffold-aware splitting,
+-chemical diversity,
+-and potential data leakage.
+
+
+
+29/06/2026
+
+Entry 6 — Effect of the Initial Experimental Design
+Objective
+Investigate whether the composition of the initial labeled pool influences the subsequent 
+active-learning campaign.
+
+The underlying hypothesis is that a more representative initial dataset produces a better first 
+classifier, leading to improved acquisition decisions throughout the campaign.
+
+Experimental Design
+The previous experiment used a random initialization of the labeled pool.
+
+A second initialization strategy was implemented:
+
+-Random initialization
+The initial labeled molecules are selected uniformly at random.
+
+This represents a typical experimental campaign where no prior knowledge is available.
+
+-Diverse initialization
+The initial labeled molecules are selected using greedy farthest-point sampling.
+
+At each iteration, the molecule maximizing the minimum distance from the already selected 
+molecules is added to the labeled pool.
+
+This strategy aims to maximize coverage of the feature space before active learning begins.
+
+All other components of the pipeline remained unchanged:
+-Synthetic dataset
+-Logistic Regression classifier
+-20 initial labeled molecules
+-10 acquisition rounds
+-50 independent simulations
+
+Results
+-Predictive performance
+The effect of initialization was measurable but modest.
+
+Greedy selection benefited the most from a diverse initialization, showing an increase 
+in average ROC AUC.
+
+Random selection showed virtually no change.
+
+Uncertainty sampling exhibited a small improvement in predictive performance.
+
+Overall, the observed improvements remained comparable to the variability across independent simulations.
+
+-Active molecule discovery
+Greedy continued to identify the largest number of active molecules regardless of the 
+initialization strategy.
+
+Random selection showed a slight increase in discovered active molecules under diverse initialization.
+
+Interestingly, uncertainty sampling discovered slightly fewer active molecules despite achieving 
+a marginally higher ROC AUC.
+
+This suggests that improving model calibration does not necessarily maximize hit discovery.
+
+-Visual Analysis
+Visual inspection of the campaigns revealed that the qualitative behavior of each acquisition 
+strategy remained unchanged.
+
+Random selection continued to explore the feature space broadly.
+
+Greedy rapidly converged toward the active region.
+
+Uncertainty sampling concentrated experiments around the estimated decision boundary.
+
+The main observable difference between the two initialization strategies was a shift in the 
+initial decision boundary learned by the classifier.
+
+This altered the early acquisition trajectory without fundamentally changing the long-term 
+behavior of the algorithms.
+
+In particular, uncertainty sampling explored a slightly larger portion of the inactive region
+when initialized with a more diverse set of molecules.
+
+This effect is likely generated during the first few acquisition rounds, where the classifier 
+is still strongly influenced by the initial experimental design.
+
+-Interpretation
+The initialization strategy influences the starting point of the active-learning campaign.
+
+However, on this relatively simple synthetic dataset, its influence is limited.
+
+The acquisition strategy itself remains the dominant factor governing the overall behavior of the campaign.
+
+This negative result is informative.
+
+Although diverse initialization provides a small benefit, the improvement alone does not appear 
+sufficient to justify a substantially more complex initialization procedure.
+
+Lessons Learned
+Initialization affects the first classifier, which influences all subsequent acquisition decisions.
+
+Different acquisition strategies exhibit different sensitivities to initialization.
+
+Improvements in predictive performance do not necessarily correspond to increased hit discovery.
+
+Visual analysis is essential for understanding why quantitative metrics change.
+
+New Hypothesis
+H2 — Diversity-Aware Uncertainty Sampling
+Pure uncertainty sampling repeatedly selects molecules located near the current decision boundary.
+
+Many of these molecules are highly similar and therefore provide partially redundant information.
+
+Instead of selecting the most uncertain molecules directly, uncertainty sampling may first identify 
+a pool of highly uncertain candidates and then prioritize structurally diverse molecules among them.
+
+This approach may preserve the benefits of uncertainty sampling while reducing redundancy and 
+improving exploration.
+
+Next Experiment
+Implement a diversity-aware uncertainty strategy.
+
+Pipeline:
+Rank all unlabeled molecules according to uncertainty.
+Keep only the most uncertain candidates.
+Select a diverse subset using a distance-based criterion.
+Compare the resulting campaign with standard uncertainty sampling.
+The objective is to determine whether explicitly encouraging diversity improves predictive 
+performance, hit discovery, or both.
+
+
+Entry 7 — Diversity-Aware Uncertainty Sampling
+Objective
+Test whether uncertainty sampling can be improved by explicitly reducing redundancy among 
+selected molecules.
+
+The motivation came from visual inspection of standard uncertainty sampling, which repeatedly 
+selected neighboring molecules along the decision boundary.
+
+Experimental Design
+A new acquisition strategy was implemented:
+
+uncertainty_topk
+Selects the k molecules closest to P(active) = 0.5.
+
+This is pure boundary refinement.
+
+uncertainty_diverse
+Rank unlabeled molecules by uncertainty.
+
+Keep the most uncertain candidate pool.
+
+Select a diverse subset from that pool using farthest-point sampling.
+
+This asks:
+
+Among uncertain molecules, which subset best covers the uncertain region?
+
+Results
+Random initialization
+Strategy	ROC AUC	Actives
+uncertainty_topk	0.811 ± 0.032	64.5
+uncertainty_diverse	0.814 ± 0.031	63.5
+￼
+Diversity-aware uncertainty slightly improved ROC AUC while discovering approximately the same number of active molecules.
+
+Diverse initialization
+Strategy	ROC AUC	Actives
+uncertainty_topk	0.815 ± 0.031	60.2
+uncertainty_diverse	0.814 ± 0.031	60.3
+￼
+With diverse initialization, both uncertainty strategies performed almost identically.
+
+-Visual Analysis
+The visual comparison was more informative than the numerical difference.
+
+uncertainty_topk selected a dense strip of points near the decision boundary.
+
+uncertainty_diverse selected points spread more evenly along the boundary.
+
+This confirms that the new strategy changed the acquisition behavior in the intended direction.
+
+-Interpretation
+Diversity-aware uncertainty successfully reduced sampling redundancy.
+
+However, the performance improvement remained small on the toy dataset.
+
+The effect was clearer under random initialization, suggesting that diverse initialization and diversity-aware acquisition may partially address the same problem: insufficient coverage of feature space.
+
+This supports the idea that initialization and acquisition strategies interact rather than acting independently.
+
+-Decision
+We will not tune candidate_pool_size on the toy dataset.
+
+Reason:
+
+Optimizing this hyperparameter now would risk overfitting to the geometry of the synthetic 2D system.
+
+Instead, the current implementation will be frozen and tested on real molecular data.
+
+Next Step
+Replace the toy 2D dataset with real molecules.
+
+Planned transition:
+toy features
+↓
+SMILES
+↓
+Morgan fingerprints
+↓
+same active-learning framework
+The next research question is: Does diversity-aware uncertainty remain useful in chemical feature space?
+
+
+
+30/06/2026
+
+
+Entry 8 — Transition from Toy Data to Real Molecular Data
+-Objective
+
+Validate the active learning framework on a real drug discovery dataset.
+
+The synthetic 2D dataset provided a controlled environment to verify the implementation and understand 
+the behavior of different acquisition strategies. The next step was to determine whether the same 
+observations hold in a realistic cheminformatics setting.
+
+-Dataset
+
+Target:
+EGFR (BindingDB)
+
+Dataset characteristics:
+750 molecules
+Binary activity labels
+Morgan fingerprints (radius = 2, 2048 bits)
+Active fraction ≈ 0.79
+
+The relatively high proportion of active compounds makes hit discovery easier than in typical 
+HTS datasets, but still provides a realistic benchmark for comparing acquisition strategies.
+
+-Feature representation
+
+Each molecule was converted from its canonical SMILES representation into a Morgan fingerprint using RDKit.
+
+Fingerprint parameters:
+Radius = 2
+Length = 2048 bits
+
+Morgan fingerprints were selected because they are a standard molecular representation for 
+ligand-based machine learning and are computationally efficient.
+
+-Experiment
+
+The same framework developed on the toy system was reused without modification.
+
+Acquisition strategies:
+
+Random
+Greedy
+Uncertainty Top-K
+Uncertainty + Diversity
+
+Initialization strategies:
+
+Random
+Diverse
+
+Evaluation:
+
+50 repeated simulations
+ROC AUC
+Number of active molecules discovered
+Results
+
+Unlike the toy dataset, the improvement obtained by diversity-aware uncertainty became much more evident.
+
+Example (random initialization):
+
+Strategy	ROC AUC
+Uncertainty Top-K	~0.938
+Uncertainty + Diversity	~0.955
+
+A similar improvement was observed with diverse initialization.
+
+-Interpretation
+
+The effect of diversity-aware uncertainty appears considerably stronger in realistic molecular 
+feature space than in the synthetic 2D dataset.
+
+This supports the hypothesis that reducing redundancy among uncertain molecules improves model 
+learning when fingerprints represent complex chemical structures.
+
+-Conclusions
+
+The active learning framework successfully generalized from synthetic data to real molecular data.
+
+The implementation remained unchanged, demonstrating that the framework is independent of the 
+feature generation pipeline.
+
+Research Notebook
+
+
+Entry 9 — Exploring Chemical Space
+Objective
+
+Complement quantitative metrics with visual analysis of the molecular dataset.
+
+Rather than evaluating active learning solely through ROC AUC, investigate how different 
+strategies explore chemical space.
+
+PCA
+Principal Component Analysis was applied to the Morgan fingerprints.
+
+Three principal components were retained.
+
+The following projections were analyzed:
+
+PC1 vs PC2
+PC1 vs PC3
+PC2 vs PC3
+
+A cumulative explained variance plot was also generated.
+
+UMAP
+A nonlinear UMAP projection was computed using the Jaccard metric, which is more appropriate for 
+binary Morgan fingerprints than Euclidean distance.
+
+UMAP aims to preserve local neighborhoods in chemical space and provides a complementary view to PCA.
+
+Descriptor Space
+In addition to abstract fingerprint projections, a descriptor-based representation was introduced.
+
+Descriptors computed from RDKit:
+
+Molecular Weight
+LogP
+TPSA
+Hydrogen Bond Donors
+Hydrogen Bond Acceptors
+Rotatable Bonds
+Ring Count
+Fraction Csp3
+
+The first descriptor visualization uses:
+Molecular Weight vs TPSA
+
+This provides an interpretable physicochemical view of the dataset.
+
+Informative Panel
+
+A comprehensive visualization panel was developed containing:
+
+Active learning campaigns
+PCA projections
+UMAP projection
+Descriptor space
+PCA explained variance
+Dataset summary
+
+The objective is to summarize the complete experiment in a single publication-quality figure.
+
+Interpretation
+
+PCA and UMAP provide complementary information.
+
+PCA highlights the dominant directions of variation within the fingerprints.
+
+UMAP reveals local chemical neighborhoods that are not visible through linear projections.
+
+Descriptor space adds physicochemical interpretability to the learned molecular representations.
+
+Conclusions
+
+Chemical-space visualization has become an integral part of the active learning workflow.
+Rather than only measuring predictive performance, the framework now allows interpretation of 
+where different acquisition strategies explore the molecular landscape.
+
+Research Notebook
+Entry 10 — Preparing Query by Committee
+Motivation
+
+The uncertainty-based acquisition strategies developed so far rely on a single predictive model.
+For a logistic regression classifier, uncertainty is defined as:
+Probability close to the decision boundary.
+However, a single model may be confidently wrong.
+This motivated the exploration of committee-based uncertainty.
+
+Scientific Question
+Rather than asking
+
+"Is one model uncertain?"
+
+ask
+
+"Do several different models disagree?"
+
+This distinction introduces a different notion of uncertainty based on disagreement between 
+independent hypotheses.
+
+Committee Composition
+
+The initial committee consists of three complementary classifiers:
+
+Logistic Regression
+Random Forest
+Gradient Boosting
+
+These models were selected because they were already used throughout the BindingDB activity 
+prediction project and exhibit different inductive biases.
+
+Disagreement Measure
+
+For each unlabeled molecule, every committee member predicts:
+
+P(active)
+
+The disagreement score is defined as the variance of these predicted probabilities.
+
+High variance indicates strong disagreement between models and identifies molecules that are 
+expected to be particularly informative if experimentally tested.
+
+Future Extensions
+
+The current implementation deliberately focuses on pure disagreement.
+
+Additional committee-based acquisition strategies may later be explored:
+
+Committee boundary uncertainty (mean probability near 0.5)
+Hybrid disagreement + boundary uncertainty
+Vote entropy
+Bayesian committees
+
+The current implementation serves as a clean baseline against which these extensions can be compared.
+
+
+Entry 11 — Query by Committee on BindingDB EGFR
+Objective
+Test whether a committee of different classifiers can provide a useful alternative definition of uncertainty.
+
+Instead of selecting molecules close to the decision boundary of a single model, Query by Committee 
+selects molecules where multiple models disagree.
+
+Motivation
+Previous acquisition strategies used Logistic Regression as the only predictive model.
+
+For uncertainty-based selection, uncertainty was defined as:
+
+P(active) ≈ 0.5
+
+Query by Committee uses a different principle:
+
+Molecules are informative when different models make different predictions.
+
+Committee Design
+The committee contained three classifiers:
+
+Logistic Regression
+
+Random Forest
+
+Gradient Boosting
+
+For each unlabeled molecule, each model predicted P(active).
+
+The disagreement score was computed as the variance of predicted probabilities across the three models.
+
+Results
+At round 10, Query by Committee performed better than uncertainty_topk, but worse than uncertainty_diverse.
+
+Initialization	Strategy	ROC AUC	Actives found
+Random	uncertainty_topk	0.938 ± 0.030	68.5
+Random	query_by_committee	0.944 ± 0.021	71.6
+Random	uncertainty_diverse	0.955 ± 0.024	70.2
+Diverse	uncertainty_topk	0.943 ± 0.025	67.0
+Diverse	query_by_committee	0.942 ± 0.028	71.5
+Diverse	uncertainty_diverse	0.956 ± 0.023	68.8
+￼
+Diagnostic Analysis
+A dedicated Query by Committee diagnostic plot was generated at round 0.
+
+It included:
+
+PCA colored by committee disagreement
+
+UMAP colored by committee disagreement
+
+Histogram of disagreement scores
+
+QBC-selected molecules projected on PCA space
+
+The histogram showed that most molecules had disagreement close to zero.
+
+Only a small minority of molecules exhibited substantial disagreement.
+
+Interpretation
+The committee members largely agreed across the dataset.
+
+This explains why Query by Committee did not behave dramatically differently from single-model 
+uncertainty sampling.
+
+The result suggests that, for EGFR, the classification problem may be relatively easy for 
+standard fingerprint-based models.
+
+Possible reasons:
+
+The dataset is strongly biased toward active molecules.
+
+Morgan fingerprints encode enough information for several model classes to learn similar boundaries.
+
+EGFR may not be a sufficiently challenging target to reveal the full benefit of committee disagreement.
+
+Conclusion
+Query by Committee introduced a meaningful alternative definition of uncertainty and modestly 
+improved over pure uncertainty top-k selection.
+
+However, it did not outperform diversity-aware uncertainty.
+
+The diagnostic analysis suggests that this is not necessarily a failure of Query by Committee, 
+but rather a consequence of low model disagreement on this particular EGFR dataset.
+
+Next Hypothesis
+Query by Committee may become more useful on targets with:
+
+more balanced active/inactive distributions,
+
+noisier activity landscapes,
+
+lower baseline model performance,
+
+or more heterogeneous chemical spaces.
+
+This motivates extending the framework to multiple BindingDB targets before drawing general 
+conclusions about acquisition strategy performance.
+
+
+
+1/06/2026
+
+Entry 12 — Target-Agnostic BindingDB Pipeline
+Objective
+
+Refactor the project from a single-target EGFR analysis into a reusable multi-target framework.
+
+The goal is to make each target reproducible with one command:
+
+python scripts/prepare_target.py --target EGFR
+Master BindingDB Dataset
+
+The full BindingDB TSV archive was cleaned and converted into a master parquet file.
+
+Final cleaned dataset:
+
+Records: 2,228,750
+Targets: 8,614
+Columns: 8
+Active fraction: 0.629
+
+The master table contains:
+
+Target Name
+Ligand SMILES
+canonical_smiles
+affinity_type
+aff_nM_median
+DG_median
+n_meas
+label
+Target Registry
+
+A target registry was introduced:
+
+configs/targets.yaml
+
+Each target now defines:
+
+query
+match
+activity_threshold_nM
+
+Example:
+
+EGFR:
+  query: "Epidermal growth factor receptor"
+  match: "exact"
+  activity_threshold_nM: 1000
+
+This allows controlled target preparation using either exact or broader matching.
+
+Target Preparation
+
+The new target preparation pipeline creates:
+
+data/processed/targets/<TARGET>/
+├── clean.parquet
+├── X_morgan.npz
+├── y_classification.npy
+├── descriptors.parquet
+└── metadata.json
+
+The .npz format is now used for compressed Morgan fingerprints.
+
+EGFR Re-definition
+
+The old EGFR benchmark used a smaller curated dataset:
+
+750 molecules
+active fraction ≈ 0.789
+
+The new exact EGFR dataset from full BindingDB contains:
+
+14,174 molecules
+active fraction ≈ 0.647
+
+This is a much broader and harder benchmark.
+
+Effect on Results
+
+The new EGFR benchmark produced lower ROC AUC values than the previous curated dataset.
+
+This is expected because the dataset is:
+
+larger,
+less active-biased,
+chemically broader,
+and more realistic.
+
+The previous EGFR benchmark was likely too easy for evaluating active learning strategies.
+
+Panel Updates
+
+The classification panel was updated to support target-agnostic loading.
+
+Additional improvements:
+
+reads from data/processed/targets/<TARGET>/;
+supports compressed Morgan fingerprints;
+includes target metadata;
+uses UMAP init="random" to avoid spectral initialization warnings;
+clips descriptor plot axes using the 99th percentile;
+reduces background molecule opacity for readability;
+supports the new larger EGFR dataset.
+Directory Cleanup
+
+The obsolete old EGFR folder was removed:
+
+data/processed/EGFR/
+
+Old BindingDB-EGFR figures and tables were archived.
+
+The canonical structure is now:
+
+data/processed/
+├── bindingdb_clean_all.parquet
+└── targets/
+    └── EGFR/
+Interpretation
+
+This refactor changes the project scope.
+
+The repository is no longer an EGFR-specific active-learning experiment.
+
+It is now a reusable framework for preparing and benchmarking multiple BindingDB targets.
+
+Next Step
+
+Prepare additional targets from the same master parquet and compare active-learning behavior 
+across different biological systems.
+
+Key question:
+
+Do acquisition strategies behave differently depending on the target, dataset balance, 
+and chemical-space structure?
+
+
+Entry 13 — Target-Specific Threshold Calibration
+Objective
+Make classification benchmarks more comparable across targets.
+
+A fixed activity threshold, such as 1000 nM, does not produce equivalent classification problems for different proteins. Some targets become highly active-biased, while others remain more balanced.
+
+Affinity Inspection Step
+A new script was added:
+
+Bash
+￼
+python scripts/inspect_target_affinity.py --target <TARGET>
+For each target, the script reports:
+
+affinity percentiles,
+
+candidate activity thresholds,
+
+active fraction at each threshold,
+
+affinity type composition,
+
+and an affinity distribution plot.
+
+This step is now part of the standard target preparation routine.
+
+EGFR Affinity Distribution
+EGFR exact target:
+
+￼
+Molecules: 14,174
+Median affinity: 255 nM
+Threshold candidates:
+
+￼
+100 nM  → 42.3% active
+500 nM  → 55.6% active
+1000 nM → 64.7% active
+Selected threshold:
+
+￼
+500 nM
+Final EGFR benchmark:
+
+￼
+Molecules: 14,174
+Active fraction: 0.556
+JAK2 Affinity Distribution
+JAK2 exact target:
+
+￼
+Molecules: 15,841
+Median affinity: 72.7 nM
+Threshold candidates:
+
+￼
+50 nM   → 44.1% active
+100 nM  → 55.7% active
+1000 nM → 79.8% active
+Selected threshold:
+
+￼
+100 nM
+Final JAK2 benchmark:
+
+￼
+Molecules: 15,841
+Active fraction: 0.557
+Why This Matters
+Using a fixed 1000 nM threshold made JAK2 strongly active-biased.
+
+After threshold calibration, EGFR and JAK2 now have nearly identical class balance:
+
+￼
+EGFR active fraction: 0.556
+JAK2 active fraction: 0.557
+This makes the active-learning comparison much fairer.
+
+Updated Benchmark Results
+With calibrated thresholds, the best-performing strategy on both targets was:
+
+￼
+uncertainty_diverse
+EGFR:
+Best ROC AUC ≈ 0.767
+
+JAK2:
+Best ROC AUC ≈ 0.779
+Greedy selection still found the largest number of actives but produced worse ROC AUC, confirming that pure exploitation does not necessarily improve model learning.
+
+Updated Routine
+For every new target, the standard workflow is now:
+
+Bash
+￼
+python scripts/prepare_target.py --target TARGET
+python scripts/inspect_target_affinity.py --target TARGET
+# update activity_threshold_nM in configs/targets.yaml if needed
+python scripts/prepare_target.py --target TARGET
+python scripts/run_bindingdb_repeated_simulation.py --target TARGET --seeds 10
+python scripts/plot_bindingdb_classification_panel.py --target TARGET
+Interpretation
+The benchmark is now moving from a fixed-threshold classification problem to a target-calibrated classification framework.
+
+This improves scientific comparability across biological targets and prevents misleading conclusions caused by target-specific affinity distributions.
+
+Next Hypothesis
+After calibrating thresholds, we can more fairly ask:
+
+Does diversity-aware uncertainty consistently improve active learning across different biological targets?
+
+Current evidence from EGFR and JAK2 supports this hypothesis.

@@ -1,0 +1,49 @@
+EGFR:
+  query: "Epidermal growth factor receptor"
+  match: "exact"
+  activity_threshold_nM: 500
+
+JAK2:
+  query: "Tyrosine-protein kinase JAK2"
+  match: "exact"
+  activity_threshold_nM: 100
+
+PARP1:
+  query: "Poly [ADP-ribose] polymerase 1"
+  match: "exact"
+  activity_threshold_nM: 50
+
+BRAF:
+  query: "Serine/threonine-protein kinase B-raf"
+  match: "exact"
+  activity_threshold_nM: 100
+
+ABL1:
+  query: "Tyrosine-protein kinase ABL1"
+  match: "exact"
+  activity_threshold_nM: 500
+
+SRC:
+  query: "Proto-oncogene tyrosine-protein kinase Src"
+  match: "exact"
+  activity_threshold_nM: 1000
+
+VEGFR2:
+  query: "Vascular endothelial growth factor receptor 2"
+  match: "exact"
+  activity_threshold_nM: 500
+
+CDK2:
+  query: "Cyclin-dependent kinase 2"
+  match: "exact"
+  activity_threshold_nM: 1000
+
+DRD2:
+  query: "D(2) dopamine receptor"
+  match: "exact"
+  activity_threshold_nM: 500
+
+CA2:
+  query: "Carbonic anhydrase 2"
+  match: "exact"
+  activity_threshold_nM: 100
