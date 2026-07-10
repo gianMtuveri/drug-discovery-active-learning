@@ -894,7 +894,7 @@ conclusions about acquisition strategy performance.
 
 
 
-1/06/2026
+1/07/2026
 
 Entry 12 — Target-Agnostic BindingDB Pipeline
 Objective
@@ -1177,7 +1177,7 @@ Next objectives:
 - Investigate Bayesian regression for uncertainty-driven active learning.
 
 
-## Entry 14 — Regression baseline on EGFR
+Entry 14 — Regression baseline on EGFR
 
 Objective:
 Extend the active-learning framework from binary classification to quantitative affinity regression.
@@ -1221,3 +1221,220 @@ potent molecules.
 Main conclusion:
 Quantitative affinity regression is feasible with the current Morgan fingerprint framework 
 and provides a strong basis for regression-based active learning.
+
+
+10/07/2026
+
+Regression active-learning benchmark across multiple targets
+Objectives
+Extend the active-learning framework from binary classification to continuous affinity prediction.
+
+Benchmark classical active-learning strategies for regression on multiple BindingDB targets.
+
+Compare predictive performance and compound discovery behaviour.
+
+Benchmark setup
+Dataset
+10 BindingDB targets:
+
+EGFR
+
+JAK2
+
+PARP1
+
+BRAF
+
+ABL1
+
+SRC
+
+VEGFR2
+
+CDK2
+
+DRD2
+
+CA2
+
+Regression target
+Continuous pAffinity
+
+Molecular representation
+Morgan fingerprints
+
+radius = 2
+
+2048 bits
+
+Predictor
+Random Forest Regressor
+
+Active-learning setup
+Initial labelled molecules: 20
+
+Batch size: 10
+
+Rounds: 10
+
+Seeds: 10
+
+Strategies:
+
+Random
+
+Greedy
+
+Uncertainty
+
+Uncertainty + Diversity
+
+Main observations
+Predictive performance
+Random sampling consistently provides the best predictive model.
+
+Across 10 targets:
+
+Random wins RMSE on 6 targets.
+
+Uncertainty + Diversity wins RMSE on 4 targets.
+
+Pure uncertainty is consistently worse.
+
+Greedy performs worst for prediction.
+
+This confirms that maintaining a representative training distribution is more beneficial than aggressively exploiting predicted affinity.
+
+Potency discovery
+Greedy consistently discovers stronger compounds.
+
+Results:
+
+Greedy achieves the highest Top-20 discovered affinity on all 10 targets.
+
+Best discovered affinity is also generally highest with Greedy.
+
+Thus, Greedy is an excellent strategy for lead identification despite producing poorer regression models.
+
+Effect of diversity
+Adding diversity substantially improves uncertainty sampling.
+
+Compared with pure uncertainty:
+
+lower RMSE
+
+higher R²
+
+higher Pearson correlation
+
+similar discovery capability
+
+This supports the hypothesis that diversity mitigates oversampling of similar compounds.
+
+Overall interpretation
+The benchmark demonstrates an intrinsic trade-off:
+
+Prediction quality
+
+↓
+
+Random
+≈
+Uncertainty + Diversity
+
+Discovery quality
+
+↓
+
+Greedy
+
+Rather than identifying a universally optimal acquisition strategy, the benchmark highlights different strategies for different experimental objectives.
+
+New visualization
+Implemented a multi-target regression comparison panel including:
+
+RMSE heatmap
+
+R² heatmap
+
+Top-20 discovered potency heatmap
+
+Strategy win counts
+
+Prediction vs discovery trade-off
+
+Mean RMSE learning curves
+
+Mean discovery curves
+
+Dataset summary
+
+The panel successfully summarizes benchmark behaviour across multiple biological targets.
+
+Issues identified
+plot_regression_report.py
+
+currently expects baseline regression CSV files for each target.
+
+Only EGFR baseline exists.
+
+Need to run baseline regression for all remaining targets before generating individual regression reports.
+
+Repository status
+Regression branch now contains:
+
+regression baseline
+
+repeated active-learning simulations
+
+multi-target benchmark
+
+regression comparison panel
+
+Regression framework considered feature-complete for classical machine learning.
+
+Next milestones
+Immediate
+Polish regression comparison panel
+
+Generate baseline reports for all targets
+
+Freeze Regression Benchmark v1
+
+Next scientific objective
+Investigate balanced acquisition strategies capable of combining:
+
+Random's predictive performance
+
+with
+
+Greedy's discovery capability
+
+Candidate approaches:
+
+Upper Confidence Bound (UCB)
+
+Dynamic exploration–exploitation scheduling
+
+Other multi-objective acquisition strategies
+
+Long-term roadmap
+Classical regression benchmark (current)
+
+Improved acquisition functions
+
+Representation comparison
+
+Morgan
+
+RDKit descriptors
+
+Molecular embeddings
+
+Deep learning
+
+Compound–target modelling
+
+Target-aware active learning
+
+Molecular generation
