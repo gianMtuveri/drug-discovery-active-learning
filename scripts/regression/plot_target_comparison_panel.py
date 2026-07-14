@@ -20,12 +20,19 @@ STRATEGY_LABELS = {
     "uncertainty_diverse": "Uncertainty + diversity",
 }
 
+# Keep strategy colors consistent across panels.
+STRATEGY_COLORS = {
+    "random": "C0",
+    "greedy": "C1",
+    "uncertainty": "C2",
+    "uncertainty_diverse": "C3",
+}
+
 
 def load_target_summary(target: str) -> pd.DataFrame:
     path = Path(
-        f"results/tables/"
-        f"{target.lower()}_regression_active_learning_summary.csv"
-    )
+        "results/tables"
+    ) / f"{target.lower()}_regression_active_learning_summary.csv"
 
     if not path.exists():
         raise FileNotFoundError(f"Missing summary file: {path}")
@@ -37,14 +44,23 @@ def load_target_summary(target: str) -> pd.DataFrame:
 
 
 def load_target_affinity(target: str) -> np.ndarray:
-    path = Path(
-        f"data/processed/targets/{target}/affinity.npy"
+    path = (
+        Path("data/processed/targets")
+        / target
+        / "affinity.npy"
     )
 
     if not path.exists():
         raise FileNotFoundError(f"Missing affinity file: {path}")
 
-    return np.load(path)
+    affinity = np.load(path)
+
+    if not np.isfinite(affinity).all():
+        raise ValueError(
+            f"Non-finite affinity values found for target {target}."
+        )
+
+    return affinity
 
 
 def make_metric_matrix(
@@ -59,7 +75,10 @@ def make_metric_matrix(
             columns="strategy",
             values=metric,
         )
-        .reindex(index=targets, columns=STRATEGIES)
+        .reindex(
+            index=targets,
+            columns=STRATEGIES,
+        )
     )
 
 
@@ -86,14 +105,20 @@ def plot_heatmap(
 
     ax.set_xticks(np.arange(len(matrix.columns)))
     ax.set_xticklabels(
-        [STRATEGY_LABELS[strategy] for strategy in matrix.columns],
+        [
+            STRATEGY_LABELS[strategy]
+            for strategy in matrix.columns
+        ],
         rotation=35,
         ha="right",
         fontsize=8,
     )
 
     ax.set_yticks(np.arange(len(matrix.index)))
-    ax.set_yticklabels(matrix.index, fontsize=8)
+    ax.set_yticklabels(
+        matrix.index,
+        fontsize=8,
+    )
 
     vmin = np.nanmin(values)
     vmax = np.nanmax(values)
@@ -110,7 +135,8 @@ def plot_heatmap(
             value = values[row_idx, col_idx]
 
             normalized = (
-                (value - vmin) / (vmax - vmin + 1e-12)
+                (value - vmin)
+                / (vmax - vmin + 1e-12)
             )
 
             text_color = (
@@ -136,7 +162,10 @@ def plot_heatmap(
 
         ax.add_patch(
             plt.Rectangle(
-                (winner_idx - 0.5, row_idx - 0.5),
+                (
+                    winner_idx - 0.5,
+                    row_idx - 0.5,
+                ),
                 1,
                 1,
                 fill=False,
@@ -151,7 +180,10 @@ def plot_heatmap(
         fraction=0.046,
         pad=0.04,
     )
-    colorbar.set_label(colorbar_label, fontsize=8)
+    colorbar.set_label(
+        colorbar_label,
+        fontsize=8,
+    )
 
 
 def plot_win_counts(
@@ -168,11 +200,19 @@ def plot_win_counts(
     counts = (
         winners
         .value_counts()
-        .reindex(STRATEGIES, fill_value=0)
+        .reindex(
+            STRATEGIES,
+            fill_value=0,
+        )
     )
 
     labels = [
         STRATEGY_LABELS[strategy]
+        for strategy in STRATEGIES
+    ]
+
+    colors = [
+        STRATEGY_COLORS[strategy]
         for strategy in STRATEGIES
     ]
 
@@ -181,6 +221,7 @@ def plot_win_counts(
     ax.bar(
         positions,
         counts.to_numpy(),
+        color=colors,
     )
 
     ax.set_xticks(positions)
@@ -197,9 +238,15 @@ def plot_win_counts(
         fontsize=11,
         fontweight="bold",
     )
-    ax.grid(axis="y", alpha=0.25)
+    ax.grid(
+        axis="y",
+        alpha=0.25,
+    )
 
-    upper = max(1, int(counts.max()) + 1)
+    upper = max(
+        1,
+        int(counts.max()) + 1,
+    )
     ax.set_ylim(0, upper)
 
     for position, value in zip(
@@ -221,47 +268,69 @@ def plot_tradeoff(
     final_summary: pd.DataFrame,
 ):
     ax.set_title(
-        "Predictive performance vs potency discovery",
+        "Prediction–discovery trade-off",
         fontsize=11,
         fontweight="bold",
     )
-
-    for target in final_summary["target"].unique():
-        target_data = final_summary[
-            final_summary["target"] == target
-        ]
-
-        ax.plot(
-            target_data["rmse_mean"],
-            target_data["top20_mean_discovered_mean"],
-            linewidth=0.7,
-            alpha=0.25,
-        )
 
     for strategy in STRATEGIES:
         strategy_data = final_summary[
             final_summary["strategy"] == strategy
         ]
 
-        ax.scatter(
-            strategy_data["rmse_mean"],
-            strategy_data["top20_mean_discovered_mean"],
-            label=STRATEGY_LABELS[strategy],
-            s=35,
-            alpha=0.8,
+        mean_rmse = strategy_data["rmse_mean"].mean()
+        std_rmse = strategy_data["rmse_mean"].std()
+
+        mean_top20 = (
+            strategy_data[
+                "top20_mean_discovered_mean"
+            ].mean()
+        )
+        std_top20 = (
+            strategy_data[
+                "top20_mean_discovered_mean"
+            ].std()
         )
 
-    ax.set_xlabel("RMSE — lower is better")
-    ax.set_ylabel("Top-20 mean pAffinity — higher is better")
+        ax.errorbar(
+            mean_rmse,
+            mean_top20,
+            xerr=std_rmse,
+            yerr=std_top20,
+            fmt="o",
+            markersize=7,
+            capsize=4,
+            linewidth=1.2,
+            color=STRATEGY_COLORS[strategy],
+            label=STRATEGY_LABELS[strategy],
+        )
+
+        ax.annotate(
+            STRATEGY_LABELS[strategy],
+            (
+                mean_rmse,
+                mean_top20,
+            ),
+            xytext=(6, 6),
+            textcoords="offset points",
+            fontsize=8,
+        )
+
+    ax.set_xlabel(
+        "Mean RMSE across targets\n"
+        "Lower is better"
+    )
+    ax.set_ylabel(
+        "Mean Top-20 discovered pAffinity\n"
+        "Higher is better"
+    )
     ax.grid(alpha=0.25)
-    ax.legend(fontsize=7)
 
 
 def plot_mean_learning_curve(
     ax,
     full_summary: pd.DataFrame,
     mean_column: str,
-    std_column: str,
     title: str,
     ylabel: str,
 ):
@@ -288,7 +357,11 @@ def plot_mean_learning_curve(
 
         rounds = aggregate["round"].to_numpy()
         mean = aggregate["mean"].to_numpy()
-        target_std = aggregate["target_std"].fillna(0).to_numpy()
+        target_std = (
+            aggregate["target_std"]
+            .fillna(0)
+            .to_numpy()
+        )
 
         ax.plot(
             rounds,
@@ -296,6 +369,7 @@ def plot_mean_learning_curve(
             marker="o",
             markersize=3,
             linewidth=1.5,
+            color=STRATEGY_COLORS[strategy],
             label=STRATEGY_LABELS[strategy],
         )
 
@@ -304,6 +378,7 @@ def plot_mean_learning_curve(
             mean - target_std,
             mean + target_std,
             alpha=0.12,
+            color=STRATEGY_COLORS[strategy],
         )
 
     ax.set_xlabel("Active-learning round")
@@ -317,6 +392,7 @@ def plot_dataset_summary(
     targets: list[str],
 ):
     ax.axis("off")
+
     ax.set_title(
         "Regression dataset summary",
         fontsize=11,
@@ -333,8 +409,8 @@ def plot_dataset_summary(
                 target,
                 f"{len(affinity):,}",
                 f"{np.median(affinity):.2f}",
-                f"{np.min(affinity):.2f}",
-                f"{np.max(affinity):.2f}",
+                f"{np.percentile(affinity, 25):.2f}",
+                f"{np.percentile(affinity, 75):.2f}",
             ]
         )
 
@@ -344,8 +420,8 @@ def plot_dataset_summary(
             "Target",
             "Molecules",
             "Median",
-            "Min",
-            "Max",
+            "P25",
+            "P75",
         ],
         loc="center",
         cellLoc="center",
@@ -360,7 +436,42 @@ def plot_dataset_summary(
         cell.set_linewidth(0.4)
 
         if row == 0:
-            cell.set_text_props(fontweight="bold")
+            cell.set_text_props(
+                fontweight="bold"
+            )
+
+
+def add_benchmark_summary(
+    fig,
+    n_targets: int,
+    final_round: int,
+):
+    text = (
+        "Benchmark setup\n"
+        f"Targets: {n_targets}\n"
+        "Seeds: 10\n"
+        f"Rounds: {final_round}\n"
+        "Initial labelled: 20\n"
+        "Batch size: 10\n"
+        "Final labelled: 120\n"
+        "Model: Random Forest\n"
+        "Features: Morgan FP, 2048 bits"
+    )
+
+    fig.text(
+        0.985,
+        0.965,
+        text,
+        ha="right",
+        va="top",
+        fontsize=8,
+        bbox={
+            "boxstyle": "round",
+            "facecolor": "white",
+            "edgecolor": "black",
+            "alpha": 0.9,
+        },
+    )
 
 
 def main():
@@ -376,7 +487,10 @@ def main():
         "--round",
         type=int,
         default=10,
-        help="Round used for final-performance heatmaps.",
+        help=(
+            "Round used for final-performance "
+            "heatmaps."
+        ),
     )
 
     parser.add_argument(
@@ -405,13 +519,17 @@ def main():
 
     missing_targets = (
         set(args.targets)
-        - set(final_summary["target"].unique())
+        - set(
+            final_summary["target"].unique()
+        )
     )
 
     if missing_targets:
         raise ValueError(
             "No final-round data found for: "
-            + ", ".join(sorted(missing_targets))
+            + ", ".join(
+                sorted(missing_targets)
+            )
         )
 
     rmse_matrix = make_metric_matrix(
@@ -441,38 +559,44 @@ def main():
     plot_heatmap(
         axes[0, 0],
         rmse_matrix,
-        title="Final RMSE",
+        title="Prediction error (RMSE)",
         colorbar_label="RMSE",
         lower_is_better=True,
+        fmt=".3f",
     )
 
     plot_heatmap(
         axes[0, 1],
         r2_matrix,
-        title="Final R²",
+        title="Explained variance (R²)",
         colorbar_label="R²",
         lower_is_better=False,
+        fmt=".3f",
     )
 
     plot_heatmap(
         axes[0, 2],
         top20_matrix,
-        title="Top-20 discovered potency",
+        title=(
+            "Lead discovery "
+            "(Top-20 mean pAffinity)"
+        ),
         colorbar_label="Mean pAffinity",
         lower_is_better=False,
+        fmt=".2f",
     )
 
     plot_win_counts(
         axes[1, 0],
         rmse_matrix,
-        title="Predictive-performance wins",
+        title="Prediction-quality wins",
         lower_is_better=True,
     )
 
     plot_win_counts(
         axes[1, 1],
         top20_matrix,
-        title="Potency-discovery wins",
+        title="Lead-discovery wins",
         lower_is_better=False,
     )
 
@@ -485,17 +609,23 @@ def main():
         axes[2, 0],
         full_summary,
         mean_column="rmse_mean",
-        std_column="rmse_std",
-        title="Mean RMSE across targets",
+        title=(
+            "Prediction error across "
+            "active-learning rounds"
+        ),
         ylabel="RMSE",
     )
 
     plot_mean_learning_curve(
         axes[2, 1],
         full_summary,
-        mean_column="top20_mean_discovered_mean",
-        std_column="top20_mean_discovered_std",
-        title="Mean discovered potency across targets",
+        mean_column=(
+            "top20_mean_discovered_mean"
+        ),
+        title=(
+            "Lead discovery across "
+            "active-learning rounds"
+        ),
         ylabel="Top-20 mean pAffinity",
     )
 
@@ -506,15 +636,23 @@ def main():
 
     fig.suptitle(
         (
-            "Multi-target regression active-learning benchmark\n"
-            f"Final comparison at round {args.round}"
+            "Multi-target regression "
+            "active-learning benchmark\n"
+            f"Final comparison at round "
+            f"{args.round}"
         ),
         fontsize=16,
         fontweight="bold",
     )
 
+    add_benchmark_summary(
+        fig,
+        n_targets=len(args.targets),
+        final_round=args.round,
+    )
+
     fig.tight_layout(
-        rect=[0, 0, 1, 0.95],
+        rect=[0, 0, 0.96, 0.94],
         h_pad=2.0,
         w_pad=1.5,
     )
