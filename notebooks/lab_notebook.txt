@@ -1438,3 +1438,188 @@ Compound–target modelling
 Target-aware active learning
 
 Molecular generation
+
+
+Notebook Entry — UCB Acquisition Benchmark
+15/07/2026
+
+Objective
+Generalize the previously implemented UCB acquisition strategy and evaluate how the exploration parameter β affects the prediction–discovery trade-off across multiple targets.
+
+Methodological improvements
+Implemented a normalized Upper Confidence Bound (UCB) acquisition function.
+
+Prediction and uncertainty are independently normalized using robust statistics (median and IQR).
+
+Acquisition score defined as
+
+𝑆=𝑦_𝑛𝑜𝑟𝑚+𝛽𝜎_𝑛𝑜𝑟𝑚S
+​
+ 
+where β controls the contribution of uncertainty.
+
+Verified mathematically that β=0 reproduces the Greedy strategy exactly.
+
+Experimental setup
+Regression
+
+Random Forest
+
+Morgan fingerprints
+
+10 targets
+
+10 random seeds
+
+10 acquisition rounds
+
+Initial labeled molecules: 20
+
+Batch size: 10
+
+β values evaluated:
+
+￼
+0
+0.25
+0.5
+1
+2
+5
+Main observations
+Increasing β consistently improves predictive performance (RMSE, R² and Pearson correlation), while 
+gradually reducing lead discovery performance.
+
+The transition is smooth across all targets.
+
+Small uncertainty contributions (β≈0.25–0.5) improve prediction while fully preserving, and in 
+aggregate slightly improving, Top-20 lead discovery.
+
+Large β values continue improving prediction but progressively sacrifice lead discovery.
+
+Multi-target summary
+Across the ten targets:
+
+β=0.25 improves RMSE on 8/10 targets while preserving Top-20 discovery on all targets.
+
+β=0.5 improves RMSE on 9/10 targets while preserving Top-20 discovery on all targets.
+
+β≥1 improves RMSE on every target, but discovery preservation begins to decrease.
+
+This suggests that small uncertainty contributions provide nearly "free" improvements in prediction.
+
+Conclusions
+The limitation of the current framework is no longer the acquisition function itself.
+
+Future work should focus on improving the quality of uncertainty estimates rather than modifying the 
+weighting scheme.
+
+Testing additional uncertainty-capable regression models (Extra Trees, Bayesian Ridge, etc.) has been 
+scheduled as future work.
+
+Notebook Entry — Modular Acquisition Engine
+15/07/2026
+
+Motivation
+The number of acquisition strategies was growing (Greedy, Uncertainty, UCB, Uncertainty+Diversity).
+
+Rather than implementing a new strategy for every idea, the acquisition process was redesigned into a 
+modular scoring framework.
+
+New architecture
+The acquisition workflow is now decomposed into three independent layers:
+
+￼
+Criteria
+↓
+
+Weighted acquisition engine
+↓
+
+Batch selection
+Acquisition criteria
+Implemented as lightweight interchangeable classes.
+
+Current criteria:
+
+PredictionCriterion
+
+UncertaintyCriterion
+
+Each criterion declares:
+
+name
+
+direction
+
+normalization
+
+weight
+
+while exposing only a raw_score() method.
+
+Weighted acquisition engine
+Responsibilities:
+
+compute raw criterion scores
+
+handle maximization/minimization
+
+normalize each criterion
+
+apply criterion weights
+
+compute the final acquisition score
+
+Current normalization:
+
+robust (median + IQR)
+
+Batch selection
+Separated from scoring.
+
+Current implementation:
+
+TopKBatchSelector
+
+Future:
+
+DiverseTopKBatchSelector
+
+This separation keeps diversity as a batch-level optimization rather than a molecular property.
+
+Validation
+Exact-equivalence tests were implemented.
+
+Verified that:
+
+Prediction-only reproduces Greedy.
+
+Uncertainty-only reproduces Uncertainty.
+
+Prediction + β·Uncertainty reproduces UCB.
+
+All tested β values generated identical selected molecules compared with the previous implementation.
+
+This validates the abstraction independently of scientific behaviour.
+
+Future direction
+The acquisition engine is now considered stable.
+
+Future developments will consist of adding new scientific criteria rather than creating new acquisition algorithms.
+
+Potential future criteria include:
+
+novelty
+
+synthetic accessibility
+
+toxicity
+
+drug-likeness
+
+protein descriptors
+
+target similarity
+
+This architecture naturally supports multi-objective molecular prioritization.
