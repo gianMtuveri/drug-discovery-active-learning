@@ -3,15 +3,87 @@ import pandas as pd
 from sklearn.model_selection import train_test_split
 
 from src.regression.evaluation import evaluate_regression
+
+from src.active_learning.batch_selection import TopKBatchSelector
+from src.active_learning.criteria import AcquisitionContext
+from src.active_learning.factories import (
+    make_prediction_engine,
+    make_ucb_engine,
+    make_uncertainty_engine,
+)
+
 from src.regression.models import make_regression_model
-from src.regression.selection import (
-    select_greedy,
+from src.regression.selection import (#legacy
+    #select_greedy,                    #obsolete
     select_random,
-    select_ucb,
-    select_uncertainty,
+    #select_ucb,                       #obsolete
+    #select_uncertainty,               #obsolete
     select_uncertainty_diverse,
 )
 from src.regression.uncertainty import predict_with_uncertainty
+
+
+def select_with_modular_engine(
+    *,
+    strategy: str,
+    unlabeled_indices: np.ndarray,
+    predicted_mean: np.ndarray,
+    predicted_uncertainty: np.ndarray,
+    X_pool: np.ndarray,
+    batch_size: int,
+    beta: float | None,
+):
+    """
+    Select a batch using the modular weighted acquisition engine.
+
+    Supported strategies:
+    - greedy
+    - uncertainty
+    - ucb
+    """
+    if strategy == "greedy":
+        engine = make_prediction_engine(
+            normalization="robust",
+        )
+
+    elif strategy == "uncertainty":
+        engine = make_uncertainty_engine(
+            normalization="robust",
+        )
+
+    elif strategy == "ucb":
+        if beta is None:
+            raise ValueError(
+                "beta must be provided when strategy='ucb'."
+            )
+
+        engine = make_ucb_engine(
+            beta=beta,
+            normalization="robust",
+        )
+
+    else:
+        raise ValueError(
+            f"Unsupported modular strategy: {strategy}"
+        )
+
+    context = AcquisitionContext(
+        unlabeled_indices=unlabeled_indices,
+        predicted_mean=predicted_mean,
+        predicted_uncertainty=predicted_uncertainty,
+        X_pool=X_pool,
+    )
+
+    acquisition_result = engine.evaluate(
+        context
+    )
+
+    batch_result = TopKBatchSelector().select(
+        acquisition_result,
+        batch_size=batch_size,
+    )
+
+    return acquisition_result, batch_result
 
 
 def run_regression_simulation(
@@ -61,6 +133,14 @@ def run_regression_simulation(
     last_batch_mean_uncertainty = np.nan
     last_batch_mean_true_affinity = np.nan
     last_batch_best_true_affinity = np.nan
+
+    # These variables are used by the new acquisition engine to track the combined score of the last batch.
+    last_batch_mean_combined_score = np.nan
+    last_batch_min_combined_score = np.nan
+    last_batch_max_combined_score = np.nan
+
+    last_batch_mean_prediction_contribution = np.nan
+    last_batch_mean_uncertainty_contribution = np.nan
 
     history = []
 
@@ -126,6 +206,22 @@ def run_regression_simulation(
                 "selected_best_true_affinity": (
                     last_batch_best_true_affinity
                 ),
+                # new engine metrics
+                "selected_mean_combined_score": (
+                    last_batch_mean_combined_score
+                ),
+                "selected_min_combined_score": (
+                    last_batch_min_combined_score
+                ),
+                "selected_max_combined_score": (
+                    last_batch_max_combined_score
+                ),
+                "selected_mean_prediction_contribution": (
+                    last_batch_mean_prediction_contribution
+                ),
+                "selected_mean_uncertainty_contribution": (
+                    last_batch_mean_uncertainty_contribution
+                ),
             }
         )
 
@@ -142,6 +238,9 @@ def run_regression_simulation(
             )
         )
 
+        acquisition_result = None
+        batch_result = None
+
         if strategy == "random":
             selected = select_random(
                 unlabeled_indices,
@@ -149,19 +248,25 @@ def run_regression_simulation(
                 rng,
             )
 
-        elif strategy == "greedy":
-            selected = select_greedy(
-                unlabeled_indices,
-                predicted_mean,
-                batch_size,
+        elif strategy in {
+            "greedy",
+            "uncertainty",
+            "ucb",
+        }:
+            acquisition_result, batch_result = (
+                select_with_modular_engine(
+                    strategy=strategy,
+                    unlabeled_indices=unlabeled_indices,
+                    predicted_mean=predicted_mean,
+                    predicted_uncertainty=predicted_uncertainty,
+                    X_pool=X[unlabeled_indices],
+                    batch_size=batch_size,
+                    beta=beta,
+                )
             )
 
-        elif strategy == "uncertainty":
-            selected = select_uncertainty(
-                unlabeled_indices,
-                predicted_uncertainty,
-                batch_size,
-            )
+            selected = batch_result.selected_indices
+            
 
         elif strategy == "uncertainty_diverse":
             selected = select_uncertainty_diverse(
@@ -173,19 +278,89 @@ def run_regression_simulation(
                 random_state=random_state + round_idx,
             )
 
-        elif strategy == "ucb":
-            selected = select_ucb(
-                unlabeled_indices=unlabeled_indices,
-                predicted_affinity=predicted_mean,
-                uncertainty=predicted_uncertainty,
-                batch_size=batch_size,
-                beta=beta,
-            )
-
         else:
             raise ValueError(
                 f"Unknown strategy: {strategy}"
+            )        
+        
+
+        if acquisition_result is not None:
+            selected_positions = (
+                batch_result.selected_pool_positions
             )
+
+            selected_combined_scores = (
+                acquisition_result.combined_scores[
+                    selected_positions
+                ]
+            )
+
+            last_batch_mean_combined_score = float(
+                np.mean(selected_combined_scores)
+            )
+
+            last_batch_min_combined_score = float(
+                np.min(selected_combined_scores)
+            )
+
+            last_batch_max_combined_score = float(
+                np.max(selected_combined_scores)
+            )
+
+            if (
+                "prediction"
+                in acquisition_result.criterion_evaluations
+            ):
+                prediction_evaluation = (
+                    acquisition_result
+                    .criterion_evaluations["prediction"]
+                )
+
+                last_batch_mean_prediction_contribution = (
+                    float(
+                        np.mean(
+                            prediction_evaluation
+                            .weighted_contribution[
+                                selected_positions
+                            ]
+                        )
+                    )
+                )
+            else:
+                last_batch_mean_prediction_contribution = (
+                    np.nan
+                )
+
+            if (
+                "uncertainty"
+                in acquisition_result.criterion_evaluations
+            ):
+                uncertainty_evaluation = (
+                    acquisition_result
+                    .criterion_evaluations["uncertainty"]
+                )
+
+                last_batch_mean_uncertainty_contribution = (
+                    float(
+                        np.mean(
+                            uncertainty_evaluation
+                            .weighted_contribution[
+                                selected_positions
+                            ]
+                        )
+                    )
+                )
+            else:
+                last_batch_mean_uncertainty_contribution = (
+                    np.nan
+                )
+
+        else:
+            last_batch_mean_combined_score = np.nan
+            last_batch_min_combined_score = np.nan
+            last_batch_max_combined_score = np.nan
+            last_batch_mean_prediction_contribution = np.nan
+            last_batch_mean_uncertainty_contribution = np.nan
 
         # Map selected global indices back to their positions in the
         # current unlabeled pool so that prediction and uncertainty
