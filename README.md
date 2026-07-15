@@ -143,7 +143,7 @@ This controlled environment makes it possible to attribute observed behaviour di
 
 **Figure – Toy acquisition benchmark**
 ![Toy Acquisition](results/figures/toy_acquisition_strategies.png)
-![Toy ROC AUC](results/figures/toy_roc_auc_evolution.png)
+![Toy ROC AUC](results/figures/toy_roc_auc.png)
 
 The synthetic benchmark highlights clear differences in exploration behaviour among acquisition strategies despite relatively small differences in predictive performance after multiple acquisition rounds.
 
@@ -158,7 +158,7 @@ Active-learning strategies differ primarily in the information they acquire rath
 The same acquisition strategies are subsequently evaluated on curated BindingDB targets.
 
 **Figure – ABL1 benchmark**
-![ABL1](results/figures/abl1_active_learning_benchmark.png)
+![ABL1](results/figures/abl1_classification_panel.png)
 
 Real molecular datasets introduce substantially greater complexity than synthetic benchmarks. Molecular fingerprints provide only a partial representation of chemical space, while experimentally measured affinities introduce additional variability.
 
@@ -167,7 +167,7 @@ Nevertheless, acquisition strategies continue to generate distinct exploration p
 Extending the analysis across multiple therapeutic targets demonstrates that no acquisition strategy consistently dominates every evaluation criterion.
 
 **Figure – Multi-target classification benchmark**
-![Classification multitarget benchmark](results/figures/classification_multitarget_benchmark.png)
+![Classification multitarget benchmark](results/figures/target_comparison_panel.png)
 
 Greedy acquisition generally retrieves the largest number of active compounds, whereas diversity-aware uncertainty provides a more balanced compromise between predictive performance and exploration.
 
@@ -192,14 +192,14 @@ Current developments include:
 - target-wise benchmarking.
 
 **Figure – EGFR regression diagnostics**
-![EGFR regression diagnostics](results/figures/egfr_regression_diagnostics.png)
+![EGFR regression diagnostics](results/figures/egfr_random_forest_regression_report.png)
 
 Rather than relying on a single performance metric, regression models are evaluated through complementary analyses including residual behaviour, ranking performance, calibration and affinity enrichment.
 
 These diagnostics establish the predictive reliability required before integrating uncertainty into acquisition strategies.
 
 **Figure – Multi-target regression benchmark**
-![Regression multitarget benchmark](results/figures/regression_multitarget_benchmark.png)
+![Regression multitarget benchmark](results/figures/regression_target_comparison_panel.png)
 
 Across multiple protein targets, regression highlights a clearer trade-off between predictive performance and lead discovery than classification.
 
