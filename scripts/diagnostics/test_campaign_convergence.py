@@ -191,12 +191,15 @@ def test_all_policy() -> None:
             "Unexpected unconverged metrics."
         )
 
+
+
+def build_metric_results():
+    _, metric_results = build_mixed_campaign()
     return metric_results
 
 
-def test_any_policy(
-    metric_results,
-) -> None:
+def test_any_policy() -> None:
+    metric_results = build_metric_results()
     result = combine_metric_convergence(
         list(
             metric_results.values()
@@ -215,9 +218,8 @@ def test_any_policy(
         )
 
 
-def test_at_least_n_policy(
-    metric_results,
-) -> None:
+def test_at_least_n_policy() -> None:
+    metric_results = build_metric_results()
     result = combine_metric_convergence(
         list(
             metric_results.values()
@@ -290,11 +292,9 @@ def test_mapping_validation() -> None:
 
 
 def main() -> None:
-    metric_results = test_all_policy()
-    test_any_policy(metric_results)
-    test_at_least_n_policy(
-        metric_results
-    )
+    test_all_policy()
+    test_any_policy()
+    test_at_least_n_policy()
     test_mapping_validation()
 
     print(
