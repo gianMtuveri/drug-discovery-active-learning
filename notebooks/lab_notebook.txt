@@ -1440,7 +1440,7 @@ Target-aware active learning
 Molecular generation
 
 
-Notebook Entry — UCB Acquisition Benchmark
+Entry 15 — UCB Acquisition Benchmark
 15/07/2026
 
 Objective
@@ -1517,7 +1517,7 @@ weighting scheme.
 Testing additional uncertainty-capable regression models (Extra Trees, Bayesian Ridge, etc.) has been 
 scheduled as future work.
 
-Notebook Entry — Modular Acquisition Engine
+Entry 16 — Modular Acquisition Engine
 15/07/2026
 
 Motivation
@@ -1623,3 +1623,142 @@ protein descriptors
 target similarity
 
 This architecture naturally supports multi-objective molecular prioritization.
+
+
+
+Entry 17 — Regression Surrogate Benchmark and Model Abstraction
+
+27/07/2026
+
+Objective
+
+The initial regression framework relied primarily on Random Forest models, which provided strong 
+predictive performance but only a limited notion of predictive uncertainty.
+
+Although this was sufficient to introduce Upper Confidence Bound acquisition, it restricted the 
+interpretation of uncertainty and prevented systematic comparisons between different regression algorithms.
+
+The objective of this milestone was therefore twofold:
+
+redesign the regression framework around a common surrogate-model interface;
+benchmark multiple regression models under identical active-learning conditions.
+
+This transition moves the project from evaluating a single regression pipeline to studying the behaviour 
+of uncertainty-aware surrogate models for molecular affinity optimization.
+
+Regression Model Interface
+
+A common abstraction was introduced for all regression models.
+
+Every surrogate now exposes the same interface:
+
+fit()
+
+predict()
+
+predict_with_uncertainty()
+
+Deterministic regressors return a point prediction, while probabilistic models additionally estimate predictive
+uncertainty.
+
+This abstraction allows acquisition strategies to operate independently of the underlying regression algorithm.
+
+Consequently, adding a new surrogate model now requires implementing only the model-specific prediction logic 
+without modifying the active-learning engine.
+
+Surrogate Models
+
+The benchmark currently includes eight regression algorithms representing different modelling philosophies.
+
+Linear models
+
+Linear Regression
+Bayesian Ridge
+
+Tree ensembles
+
+Random Forest
+Extra Trees
+Gradient Boosting
+HistGradientBoosting
+
+Instance-based methods
+
+K-Nearest Neighbours
+
+Probabilistic models
+
+Gaussian Process Regression
+
+The selected models cover deterministic, ensemble and probabilistic approaches while remaining 
+computationally practical for repeated active-learning simulations.
+
+Experimental Design
+
+The benchmark was performed on the EGFR affinity dataset.
+
+Configuration:
+
+Upper Confidence Bound acquisition
+20 independent random seeds
+20 acquisition rounds
+identical initialization
+identical molecular representation
+identical acquisition workflow
+
+This experimental design isolates the effect of the surrogate model itself while keeping every other component fixed.
+
+Effect of the Exploration Parameter
+
+To investigate how uncertainty influences acquisition behaviour, the benchmark compared two exploration settings:
+
+β = 1
+β = 2
+
+For each surrogate model, predictive performance and molecular discovery were evaluated using:
+
+RMSE
+MAE
+R²
+Pearson correlation
+Best discovered affinity
+Mean discovered affinity
+Top-20 discovered affinity
+Results
+
+The comparison revealed a consistent trade-off between prediction and molecular discovery.
+
+For uncertainty-aware models such as Bayesian Ridge and Gaussian Process Regression, increasing β generally 
+improved predictive performance.
+
+Lower prediction errors and stronger correlations were obtained by assigning greater weight to predictive 
+uncertainty during acquisition.
+
+However, the same increase in exploration often reduced the affinity of the best compounds discovered during
+the campaign.
+
+In contrast, several deterministic models showed little or no sensitivity to the tested β values, suggesting 
+that their uncertainty estimates contributed only marginally to the acquisition score under the current implementation.
+
+Rather than identifying a universally optimal exploration parameter, the benchmark demonstrates that the 
+appropriate balance between exploration and exploitation depends on both the surrogate model and the scientific objective.
+
+Lessons Learned
+
+The quality of uncertainty estimation is at least as important as the acquisition function itself.
+
+Once the acquisition framework became sufficiently flexible, differences between surrogate models emerged as 
+a dominant source of variation in active-learning behaviour.
+
+The newly introduced abstraction considerably simplifies future methodological developments by allowing new 
+regression models to be evaluated without modifying the remainder of the workflow.
+
+Next Milestone
+
+The current framework prioritizes molecules exclusively according to predicted affinity and uncertainty.
+
+The next stage will extend candidate evaluation through chemically meaningful descriptors, including novelty, 
+structural diversity, drug-likeness, synthetic accessibility and structural safety alerts.
+
+These properties will ultimately support multi-objective molecular prioritization and more realistic active-learning 
+campaigns.
