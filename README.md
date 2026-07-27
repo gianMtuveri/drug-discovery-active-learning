@@ -20,6 +20,10 @@ Current capabilities include:
 - Uncertainty-aware active learning
 - Multi-target benchmarking
 - Modular evaluation pipelines
+- Modular surrogate-model interface
+- Eight interchangeable regression models
+- Upper Confidence Bound acquisition
+- Comparative regression benchmarking
 
 The long-term objective is to provide a transparent and extensible framework for studying decision-making under constrained experimental budgets while progressively extending the workflow toward closed-loop molecular discovery.
 
@@ -47,12 +51,15 @@ The repository provides a modular framework for investigating active learning in
 
 Current developments include:
 
-- binary activity classification;
-- continuous affinity prediction;
-- uncertainty-aware acquisition;
-- repeated active-learning simulations;
-- multi-target benchmarking;
-- modular evaluation pipelines.
+• investigate exploration–exploitation trade-offs;
+
+• compare acquisition strategies;
+
+• benchmark uncertainty-aware surrogate models;
+
+• study molecular discovery under limited experimental budgets;
+
+• provide an extensible research framework.
 
 The project is intended as a research framework rather than a production-ready virtual screening platform. Emphasis is placed on reproducibility, transparency and controlled methodological comparisons.
 
@@ -182,6 +189,7 @@ Different acquisition strategies optimize different scientific objectives. Their
 Binary classification inevitably discards information contained in experimental affinity measurements.
 
 The regression framework extends the methodology toward continuous affinity prediction while preserving the modular active-learning architecture established for classification.
+Unlike classification, regression retains the quantitative information contained in experimental affinity measurements. This enables acquisition strategies to prioritize compounds according to both expected potency and predictive uncertainty, transforming active learning into a sequential optimization problem rather than a binary classification task.
 
 Current developments include:
 
@@ -191,12 +199,49 @@ Current developments include:
 - repeated simulations;
 - target-wise benchmarking.
 
+### Regression surrogate models
+
+The regression workflow is built around a common surrogate-model interface that
+allows different regression algorithms to be evaluated under identical
+active-learning campaigns.
+
+Current implementations include:
+
+- Linear Regression
+- Bayesian Ridge
+- Random Forest
+- Extra Trees
+- Gradient Boosting
+- HistGradientBoosting
+- K-Nearest Neighbours
+- Gaussian Process Regression
+
+This abstraction separates model implementation from acquisition,
+allowing new surrogate models to be integrated without modifying the
+active-learning workflow.
+
 **Figure – EGFR regression diagnostics**
 ![EGFR regression diagnostics](results/figures/egfr_random_forest_regression_report.png)
 
 Rather than relying on a single performance metric, regression models are evaluated through complementary analyses including residual behaviour, ranking performance, calibration and affinity enrichment.
 
 These diagnostics establish the predictive reliability required before integrating uncertainty into acquisition strategies.
+
+### Upper Confidence Bound acquisition
+
+Regression campaigns use an Upper Confidence Bound (UCB) acquisition
+function,
+
+UCB = prediction + β × uncertainty
+
+where β controls the balance between exploitation and exploration.
+
+Prediction and uncertainty are normalized independently using robust
+statistics before computing the acquisition score, allowing models with
+different uncertainty scales to be compared fairly.
+
+Setting β = 0 reproduces pure greedy acquisition, while increasing β
+progressively favours exploratory selections.
 
 **Figure – Multi-target regression benchmark**
 ![Regression multitarget benchmark](results/figures/regression_target_comparison_panel.png)
@@ -205,9 +250,35 @@ Across multiple protein targets, regression highlights a clearer trade-off betwe
 
 Rather than treating exploration and exploitation as independent acquisition strategies, uncertainty naturally becomes part of the acquisition score itself.
 
+### Regression benchmark
+
+The regression framework has been benchmarked across multiple surrogate
+models using repeated active-learning simulations.
+
+The modular interface enables every surrogate model to be evaluated under identical experimental conditions. All benchmarks use the same molecular representation, initialization strategy, acquisition protocol and evaluation metrics, ensuring that observed differences originate from the surrogate model itself rather than from changes in the active-learning workflow.
+
+Performance is evaluated using RMSE, MAE, R², Pearson correlation,
+best discovered affinity, mean discovered affinity and Top-20 discovered
+affinity.
+
+
 **Key observation**
 
 Continuous affinity prediction transforms active learning from a classification problem into a sequential optimization problem.
+
+
+### Influence of the exploration parameter
+
+The influence of the UCB exploration parameter was evaluated by comparing
+β = 1 and β = 2 across all surrogate models.
+
+Increasing β generally improved predictive performance for Bayesian Ridge,
+Gaussian Process Regression and Random Forest. However, lower β values
+generally retained stronger molecular discovery performance for uncertainty-aware regressors.
+
+These experiments highlight a model-dependent trade-off between surrogate
+accuracy and compound discovery rather than identifying a universally
+optimal exploration strategy.
 
 ---
 
@@ -337,11 +408,22 @@ Current developments focus on extending the framework along four complementary d
 - simulated assay variability;
 - adaptive experimental budgets.
 
-### Molecular discovery
+### Molecular prioritization
 
-- molecular generation for low-data targets;
-- iterative molecular optimization;
-- closed-loop discovery workflows.
+Future work will extend candidate evaluation beyond predicted affinity
+through chemically meaningful molecular properties, including:
+
+-Physicochemical descriptors
+-Novelty estimation
+-Chemical diversity
+-Drug-likeness
+-Structural safety alerts
+-Synthetic accessibility
+-Multi-objective acquisition
+
+These descriptors will provide the basis for future multi-objective
+acquisition strategies capable of balancing affinity, novelty,
+developability and chemical diversity.
 
 ---
 

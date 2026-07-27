@@ -14,7 +14,7 @@ from src.active_learning.factories import (
     make_uncertainty_engine,
 )
 from src.data.targets import load_target_regression
-from src.regression.models import make_regression_model
+from src.regression.models import make_regression_surrogate
 from src.regression.selection import (
     select_greedy,
     select_ucb,
@@ -138,7 +138,7 @@ def main():
         assume_unique=False,
     )
 
-    model = make_regression_model(
+    model = make_regression_surrogate(
         model_name="random_forest",
         random_state=args.seed,
     )
