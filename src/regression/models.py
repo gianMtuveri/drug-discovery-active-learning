@@ -12,6 +12,7 @@ from sklearn.ensemble import (
     HistGradientBoostingRegressor,
 )
 from sklearn.linear_model import BayesianRidge
+from sklearn.feature_selection import VarianceThreshold
 from sklearn.preprocessing import StandardScaler
 
 from src.regression.base import RegressionSurrogate
@@ -163,6 +164,10 @@ class BayesianRidgeSurrogate(
     ) -> None:
         # with_mean=False avoids densification if sparse fingerprint
         # matrices are introduced later.
+        self.variance_filter = VarianceThreshold(
+            threshold=0.0,
+        )
+        
         self.scaler = StandardScaler(
             with_mean=False,
         )
@@ -180,7 +185,9 @@ class BayesianRidgeSurrogate(
         X: FloatArray,
         y: FloatArray,
     ) -> "BayesianRidgeSurrogate":
-        X_scaled = self.scaler.fit_transform(X)
+        X_filtered = self.variance_filter.fit_transform(X)
+
+        X_scaled = self.scaler.fit_transform(X_filtered)
 
         self.model.fit(
             X_scaled,
@@ -197,7 +204,9 @@ class BayesianRidgeSurrogate(
     ) -> FloatArray:
         self._check_is_fitted()
 
-        X_scaled = self.scaler.transform(X)
+        X_filtered = self.variance_filter.transform(X)
+
+        X_scaled = self.scaler.transform(X_filtered)
 
         predictions = self.model.predict(
             X_scaled
@@ -214,7 +223,9 @@ class BayesianRidgeSurrogate(
     ) -> tuple[FloatArray, FloatArray]:
         self._check_is_fitted()
 
-        X_scaled = self.scaler.transform(X)
+        X_filtered = self.variance_filter.transform(X)
+
+        X_scaled = self.scaler.transform(X_filtered)
 
         mean_prediction, uncertainty = (
             self.model.predict(
