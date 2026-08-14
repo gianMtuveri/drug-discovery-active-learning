@@ -1,0 +1,446 @@
+import time
+
+import numpy as np
+import pandas as pd
+from sklearn.model_selection import train_test_split
+
+from src.regression.evaluation import evaluate_regression
+
+from src.active_learning.batch_selection import TopKBatchSelector
+from src.active_learning.criteria import AcquisitionContext
+from src.active_learning.factories import (
+    make_prediction_engine,
+    make_ucb_engine,
+    make_uncertainty_engine,
+)
+
+from src.regression.models import make_regression_surrogate
+from src.regression.selection import (#legacy
+    #select_greedy,                    #obsolete
+    select_random,
+    #select_ucb,                       #obsolete
+    #select_uncertainty,               #obsolete
+    select_uncertainty_diverse,
+)
+
+
+def select_with_modular_engine(
+    *,
+    strategy: str,
+    unlabeled_indices: np.ndarray,
+    predicted_mean: np.ndarray,
+    predicted_uncertainty: np.ndarray,
+    X_pool: np.ndarray,
+    batch_size: int,
+    beta: float | None,
+):
+    """
+    Select a batch using the modular weighted acquisition engine.
+
+    Supported strategies:
+    - greedy
+    - uncertainty
+    - ucb
+    """
+    if strategy == "greedy":
+        engine = make_prediction_engine(
+            normalization="robust",
+        )
+
+    elif strategy == "uncertainty":
+        engine = make_uncertainty_engine(
+            normalization="robust",
+        )
+
+    elif strategy == "ucb":
+        if beta is None:
+            raise ValueError(
+                "beta must be provided when strategy='ucb'."
+            )
+
+        engine = make_ucb_engine(
+            beta=beta,
+            normalization="robust",
+        )
+
+    else:
+        raise ValueError(
+            f"Unsupported modular strategy: {strategy}"
+        )
+
+    context = AcquisitionContext(
+        unlabeled_indices=unlabeled_indices,
+        predicted_mean=predicted_mean,
+        predicted_uncertainty=predicted_uncertainty,
+        X_pool=X_pool,
+    )
+
+    acquisition_result = engine.evaluate(
+        context
+    )
+
+    batch_result = TopKBatchSelector().select(
+        acquisition_result,
+        batch_size=batch_size,
+    )
+
+    return acquisition_result, batch_result
+
+
+def run_regression_simulation(
+    X: np.ndarray,
+    y: np.ndarray,
+    strategy: str,
+    model_name: str = "random_forest",
+    random_state: int = 42,
+    n_initial: int = 20,
+    batch_size: int = 10,
+    n_rounds: int = 10,
+    test_size: float = 0.2,
+    candidate_pool_size: int = 100,
+    beta: float | None = None,
+) -> pd.DataFrame:
+
+    rng = np.random.default_rng(random_state)
+
+    dataset_best = float(np.max(y))
+
+    if strategy == "ucb":
+        if beta is None:
+            raise ValueError(
+                "beta must be provided when strategy='ucb'."
+            )
+
+        if beta < 0:
+            raise ValueError("beta must be non-negative.")
+
+    pool_indices, test_indices = train_test_split(
+        np.arange(len(y)),
+        test_size=test_size,
+        random_state=random_state,
+    )
+
+    labeled_indices = rng.choice(
+        pool_indices,
+        size=min(n_initial, len(pool_indices)),
+        replace=False,
+    )
+
+    unlabeled_indices = np.setdiff1d(
+        pool_indices,
+        labeled_indices,
+        assume_unique=False,
+    )
+
+    # These variables describe the batch acquired after the previous round.
+    # At round 0, no active-learning batch has been acquired yet.
+    last_batch_mean_prediction = np.nan
+    last_batch_mean_uncertainty = np.nan
+    last_batch_mean_true_affinity = np.nan
+    last_batch_best_true_affinity = np.nan
+
+    # These variables are used by the new acquisition engine to track the combined score of the last batch.
+    last_batch_mean_combined_score = np.nan
+    last_batch_min_combined_score = np.nan
+    last_batch_max_combined_score = np.nan
+
+    last_batch_mean_prediction_contribution = np.nan
+    last_batch_mean_uncertainty_contribution = np.nan
+
+    history = []
+
+    for round_idx in range(n_rounds + 1):
+        round_start = time.perf_counter()
+
+        model = make_regression_surrogate(
+            model_name=model_name,
+            random_state=random_state + round_idx,
+        )
+
+        model.fit(
+            X[labeled_indices],
+            y[labeled_indices],
+        )
+
+        test_predictions = model.predict(
+            X[test_indices]
+        )
+
+        metrics = evaluate_regression(
+            y[test_indices],
+            test_predictions,
+        )
+
+        discovered = y[labeled_indices]
+
+        history.append(
+            {
+                "round": round_idx,
+                "strategy": strategy,
+                "model": model_name,
+                "beta": (
+                    beta
+                    if strategy == "ucb"
+                    else np.nan
+                ),
+                "seed": random_state,
+                "n_labeled": len(labeled_indices),
+                "rmse": metrics["rmse"],
+                "mae": metrics["mae"],
+                "r2": metrics["r2"],
+                "pearson": metrics["pearson"],
+                "best_discovered": float(
+                    discovered.max()
+                ),
+                "top20_mean_discovered": float(
+                    np.mean(
+                        np.sort(discovered)[
+                            -min(20, len(discovered)):
+                        ]
+                    )
+                ),
+                "mean_discovered": float(
+                    discovered.mean()
+                ),
+                "dataset_best": dataset_best,
+                "fraction_best_found": float(
+                    discovered.max() / dataset_best
+                ) if dataset_best != 0 else np.nan,
+                "distance_to_best": float(
+                    dataset_best - discovered.max()
+                ),
+                "round_runtime_seconds": np.nan,
+                "pool_mean_uncertainty": np.nan,
+                "pool_max_uncertainty": np.nan,
+                "selected_mean_prediction": (
+                    last_batch_mean_prediction
+                ),
+                "selected_mean_uncertainty": (
+                    last_batch_mean_uncertainty
+                ),
+                "selected_mean_true_affinity": (
+                    last_batch_mean_true_affinity
+                ),
+                "selected_best_true_affinity": (
+                    last_batch_best_true_affinity
+                ),
+                # new engine metrics
+                "selected_mean_combined_score": (
+                    last_batch_mean_combined_score
+                ),
+                "selected_min_combined_score": (
+                    last_batch_min_combined_score
+                ),
+                "selected_max_combined_score": (
+                    last_batch_max_combined_score
+                ),
+                "selected_mean_prediction_contribution": (
+                    last_batch_mean_prediction_contribution
+                ),
+                "selected_mean_uncertainty_contribution": (
+                    last_batch_mean_uncertainty_contribution
+                ),
+            }
+        )
+
+        if (
+            round_idx == n_rounds
+            or len(unlabeled_indices) == 0
+        ):
+            history[-1]["round_runtime_seconds"] = float(
+                time.perf_counter() - round_start
+            )
+            break
+
+        predicted_mean, predicted_uncertainty = (
+            model.predict_with_uncertainty(
+                X[unlabeled_indices],
+            )
+        )
+
+        history[-1]["pool_mean_uncertainty"] = float(
+            np.mean(predicted_uncertainty)
+        )
+        history[-1]["pool_max_uncertainty"] = float(
+            np.max(predicted_uncertainty)
+        )
+
+        acquisition_result = None
+        batch_result = None
+
+        if strategy == "random":
+            selected = select_random(
+                unlabeled_indices,
+                batch_size,
+                rng,
+            )
+
+        elif strategy in {
+            "greedy",
+            "uncertainty",
+            "ucb",
+        }:
+            acquisition_result, batch_result = (
+                select_with_modular_engine(
+                    strategy=strategy,
+                    unlabeled_indices=unlabeled_indices,
+                    predicted_mean=predicted_mean,
+                    predicted_uncertainty=predicted_uncertainty,
+                    X_pool=X[unlabeled_indices],
+                    batch_size=batch_size,
+                    beta=beta,
+                )
+            )
+
+            selected = batch_result.selected_indices
+            
+
+        elif strategy == "uncertainty_diverse":
+            selected = select_uncertainty_diverse(
+                X,
+                unlabeled_indices,
+                predicted_uncertainty,
+                batch_size,
+                candidate_pool_size,
+                random_state=random_state + round_idx,
+            )
+
+        else:
+            raise ValueError(
+                f"Unknown strategy: {strategy}"
+            )        
+        
+
+        if acquisition_result is not None:
+            selected_positions = (
+                batch_result.selected_pool_positions
+            )
+
+            selected_combined_scores = (
+                acquisition_result.combined_scores[
+                    selected_positions
+                ]
+            )
+
+            last_batch_mean_combined_score = float(
+                np.mean(selected_combined_scores)
+            )
+
+            last_batch_min_combined_score = float(
+                np.min(selected_combined_scores)
+            )
+
+            last_batch_max_combined_score = float(
+                np.max(selected_combined_scores)
+            )
+
+            if (
+                "prediction"
+                in acquisition_result.criterion_evaluations
+            ):
+                prediction_evaluation = (
+                    acquisition_result
+                    .criterion_evaluations["prediction"]
+                )
+
+                last_batch_mean_prediction_contribution = (
+                    float(
+                        np.mean(
+                            prediction_evaluation
+                            .weighted_contribution[
+                                selected_positions
+                            ]
+                        )
+                    )
+                )
+            else:
+                last_batch_mean_prediction_contribution = (
+                    np.nan
+                )
+
+            if (
+                "uncertainty"
+                in acquisition_result.criterion_evaluations
+            ):
+                uncertainty_evaluation = (
+                    acquisition_result
+                    .criterion_evaluations["uncertainty"]
+                )
+
+                last_batch_mean_uncertainty_contribution = (
+                    float(
+                        np.mean(
+                            uncertainty_evaluation
+                            .weighted_contribution[
+                                selected_positions
+                            ]
+                        )
+                    )
+                )
+            else:
+                last_batch_mean_uncertainty_contribution = (
+                    np.nan
+                )
+
+        else:
+            last_batch_mean_combined_score = np.nan
+            last_batch_min_combined_score = np.nan
+            last_batch_max_combined_score = np.nan
+            last_batch_mean_prediction_contribution = np.nan
+            last_batch_mean_uncertainty_contribution = np.nan
+
+        # Map selected global indices back to their positions in the
+        # current unlabeled pool so that prediction and uncertainty
+        # diagnostics can be extracted.
+        selected_mask = np.isin(
+            unlabeled_indices,
+            selected,
+        )
+
+        if selected_mask.sum() != len(selected):
+            raise RuntimeError(
+                "Could not map all selected indices to the unlabeled pool."
+            )
+
+        selected_predicted_mean = (
+            predicted_mean[selected_mask]
+        )
+
+        selected_uncertainty_values = (
+            predicted_uncertainty[selected_mask]
+        )
+
+        selected_true_affinity = y[selected]
+
+        # These values will be written into the next history row.
+        last_batch_mean_prediction = float(
+            np.mean(selected_predicted_mean)
+        )
+
+        last_batch_mean_uncertainty = float(
+            np.mean(selected_uncertainty_values)
+        )
+
+        last_batch_mean_true_affinity = float(
+            np.mean(selected_true_affinity)
+        )
+
+        last_batch_best_true_affinity = float(
+            np.max(selected_true_affinity)
+        )
+
+        labeled_indices = np.concatenate(
+            [labeled_indices, selected]
+        )
+
+        unlabeled_indices = np.setdiff1d(
+            unlabeled_indices,
+            selected,
+            assume_unique=False,
+        )
+
+        history[-1]["round_runtime_seconds"] = float(
+            time.perf_counter() - round_start
+        )
+
+    return pd.DataFrame(history)

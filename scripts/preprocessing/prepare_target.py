@@ -8,8 +8,8 @@ import numpy as np
 import pandas as pd
 import yaml
 
-from src.fingerprints import featurize_smiles
-from src.descriptors import compute_basic_descriptors
+from src.chemistry.fingerprints import featurize_smiles
+from src.chemistry.descriptors import compute_basic_descriptors
 
 
 def load_target_registry(path):
@@ -91,9 +91,14 @@ def prepare_target(
     affinity_values = target_df.iloc[valid_indices]["aff_nM_median"].to_numpy()
 
     y = (affinity_values <= activity_threshold_nM).astype(int)
-
     save_compressed_fingerprints(X_path, X)
     np.save(y_path, y)
+
+    p_affinity = 9 - np.log10(affinity_values) # pAffinity for regression tasks
+    affinity_path = target_dir / "affinity.npy"
+    np.save(affinity_path, p_affinity)
+
+
 
     descriptors = compute_basic_descriptors(
         target_df.iloc[valid_indices]["canonical_smiles"].tolist()
@@ -121,7 +126,9 @@ def prepare_target(
             "X_morgan": str(X_path),
             "y_classification": str(y_path),
             "descriptors": str(descriptors_path),
+            "affinity": str(affinity_path),
         },
+        "regression_target": "pAffinity",
     }
 
     with open(metadata_path, "w") as f:

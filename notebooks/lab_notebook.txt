@@ -894,7 +894,7 @@ conclusions about acquisition strategy performance.
 
 
 
-1/06/2026
+1/07/2026
 
 Entry 12 — Target-Agnostic BindingDB Pipeline
 Objective
@@ -1036,7 +1036,8 @@ Entry 13 — Target-Specific Threshold Calibration
 Objective
 Make classification benchmarks more comparable across targets.
 
-A fixed activity threshold, such as 1000 nM, does not produce equivalent classification problems for different proteins. Some targets become highly active-biased, while others remain more balanced.
+A fixed activity threshold, such as 1000 nM, does not produce equivalent classification problems 
+for different proteins. Some targets become highly active-biased, while others remain more balanced.
 
 Affinity Inspection Step
 A new script was added:
@@ -1120,7 +1121,8 @@ Best ROC AUC ≈ 0.767
 
 JAK2:
 Best ROC AUC ≈ 0.779
-Greedy selection still found the largest number of actives but produced worse ROC AUC, confirming that pure exploitation does not necessarily improve model learning.
+Greedy selection still found the largest number of actives but produced worse ROC AUC, confirming that 
+pure exploitation does not necessarily improve model learning.
 
 Updated Routine
 For every new target, the standard workflow is now:
@@ -1134,9 +1136,11 @@ python scripts/prepare_target.py --target TARGET
 python scripts/run_bindingdb_repeated_simulation.py --target TARGET --seeds 10
 python scripts/plot_bindingdb_classification_panel.py --target TARGET
 Interpretation
-The benchmark is now moving from a fixed-threshold classification problem to a target-calibrated classification framework.
+The benchmark is now moving from a fixed-threshold classification problem to a target-calibrated 
+classification framework.
 
-This improves scientific comparability across biological targets and prevents misleading conclusions caused by target-specific affinity distributions.
+This improves scientific comparability across biological targets and prevents misleading conclusions 
+caused by target-specific affinity distributions.
 
 Next Hypothesis
 After calibrating thresholds, we can more fairly ask:
@@ -1151,19 +1155,610 @@ Milestone: Multi-target BindingDB benchmark completed.
 
 Major developments:
 - Generalized preprocessing to arbitrary BindingDB targets through targets.yaml.
-- Created automatic target preparation pipeline including fingerprints, descriptors, metadata and classification labels.
+- Created automatic target preparation pipeline including fingerprints, descriptors, metadata and 
+classification labels.
 - Added affinity-distribution inspection to calibrate activity thresholds individually for each target.
-- Benchmarked five active-learning strategies (Greedy, Random, Uncertainty Top-K, Uncertainty + Diversity and Query by Committee) on ten pharmacologically distinct targets.
-- Built comparative visualization panel summarizing ROC-AUC, active discovery, descriptor distributions and dataset statistics.
+- Benchmarked five active-learning strategies (Greedy, Random, Uncertainty Top-K, Uncertainty + Diversity 
+and Query by Committee) on ten pharmacologically distinct targets.
+- Built comparative visualization panel summarizing ROC-AUC, active discovery, descriptor distributions 
+and dataset statistics.
 
 Main observations:
 - Greedy consistently maximizes discovered actives but yields the weakest classifiers.
 - Diversity-aware uncertainty sampling is the most consistent acquisition strategy across targets.
 - Random sampling remains a surprisingly competitive baseline after balancing class distributions.
-- Query by Committee offers little benefit with a committee composed of closely related logistic-regression models.
+- Query by Committee offers little benefit with a committee composed of closely related logistic-regression 
+models.
 - Target-specific affinity thresholds are essential for fair cross-target comparisons.
 
 Next objectives:
 - Clean repository and update documentation.
 - Develop regression pipeline for affinity prediction with uncertainty estimation.
 - Investigate Bayesian regression for uncertainty-driven active learning.
+
+
+Entry 14 — Regression baseline on EGFR
+
+Objective:
+Extend the active-learning framework from binary classification to quantitative affinity regression.
+
+Regression target:
+pAffinity = 9 - log10(affinity_nM)
+
+This transforms affinity values into a logarithmic scale where higher values indicate stronger binding.
+
+Implemented:
+- Added affinity.npy to prepared target folders.
+- Added load_target_regression().
+- Added regression baseline models:
+  - Random Forest Regressor
+  - Gradient Boosting Regressor
+  - Bayesian Ridge
+- Added regression metrics:
+  - RMSE
+  - MAE
+  - R²
+  - Pearson correlation
+  - best test-set pAffinity
+  - top-20 mean pAffinity
+  - top-100 enrichment
+- Added regression diagnostic report.
+
+EGFR Random Forest baseline:
+RMSE: 0.755
+MAE: 0.528
+R²: 0.741
+Pearson r: 0.862
+
+Interpretation:
+The Random Forest baseline captures a substantial fraction of the EGFR affinity landscape. 
+The predicted-vs-experimental plot shows strong agreement, while the residual plot reveals mild 
+regression-to-the-mean behavior. The calibration curve is close to ideal, suggesting that average 
+predicted affinity is well aligned with average experimental affinity. 
+The ranking-quality plot shows that top predicted compounds are strongly enriched in experimentally 
+potent molecules.
+
+Main conclusion:
+Quantitative affinity regression is feasible with the current Morgan fingerprint framework 
+and provides a strong basis for regression-based active learning.
+
+
+10/07/2026
+
+Regression active-learning benchmark across multiple targets
+Objectives
+Extend the active-learning framework from binary classification to continuous affinity prediction.
+
+Benchmark classical active-learning strategies for regression on multiple BindingDB targets.
+
+Compare predictive performance and compound discovery behaviour.
+
+Benchmark setup
+Dataset
+10 BindingDB targets:
+
+EGFR
+
+JAK2
+
+PARP1
+
+BRAF
+
+ABL1
+
+SRC
+
+VEGFR2
+
+CDK2
+
+DRD2
+
+CA2
+
+Regression target
+Continuous pAffinity
+
+Molecular representation
+Morgan fingerprints
+
+radius = 2
+
+2048 bits
+
+Predictor
+Random Forest Regressor
+
+Active-learning setup
+Initial labelled molecules: 20
+
+Batch size: 10
+
+Rounds: 10
+
+Seeds: 10
+
+Strategies:
+
+Random
+
+Greedy
+
+Uncertainty
+
+Uncertainty + Diversity
+
+Main observations
+Predictive performance
+Random sampling consistently provides the best predictive model.
+
+Across 10 targets:
+
+Random wins RMSE on 6 targets.
+
+Uncertainty + Diversity wins RMSE on 4 targets.
+
+Pure uncertainty is consistently worse.
+
+Greedy performs worst for prediction.
+
+This confirms that maintaining a representative training distribution is more beneficial than aggressively exploiting predicted affinity.
+
+Potency discovery
+Greedy consistently discovers stronger compounds.
+
+Results:
+
+Greedy achieves the highest Top-20 discovered affinity on all 10 targets.
+
+Best discovered affinity is also generally highest with Greedy.
+
+Thus, Greedy is an excellent strategy for lead identification despite producing poorer regression models.
+
+Effect of diversity
+Adding diversity substantially improves uncertainty sampling.
+
+Compared with pure uncertainty:
+
+lower RMSE
+
+higher R²
+
+higher Pearson correlation
+
+similar discovery capability
+
+This supports the hypothesis that diversity mitigates oversampling of similar compounds.
+
+Overall interpretation
+The benchmark demonstrates an intrinsic trade-off:
+
+Prediction quality
+
+↓
+
+Random
+≈
+Uncertainty + Diversity
+
+Discovery quality
+
+↓
+
+Greedy
+
+Rather than identifying a universally optimal acquisition strategy, the benchmark highlights different strategies for different experimental objectives.
+
+New visualization
+Implemented a multi-target regression comparison panel including:
+
+RMSE heatmap
+
+R² heatmap
+
+Top-20 discovered potency heatmap
+
+Strategy win counts
+
+Prediction vs discovery trade-off
+
+Mean RMSE learning curves
+
+Mean discovery curves
+
+Dataset summary
+
+The panel successfully summarizes benchmark behaviour across multiple biological targets.
+
+Issues identified
+plot_regression_report.py
+
+currently expects baseline regression CSV files for each target.
+
+Only EGFR baseline exists.
+
+Need to run baseline regression for all remaining targets before generating individual regression reports.
+
+Repository status
+Regression branch now contains:
+
+regression baseline
+
+repeated active-learning simulations
+
+multi-target benchmark
+
+regression comparison panel
+
+Regression framework considered feature-complete for classical machine learning.
+
+Next milestones
+Immediate
+Polish regression comparison panel
+
+Generate baseline reports for all targets
+
+Freeze Regression Benchmark v1
+
+Next scientific objective
+Investigate balanced acquisition strategies capable of combining:
+
+Random's predictive performance
+
+with
+
+Greedy's discovery capability
+
+Candidate approaches:
+
+Upper Confidence Bound (UCB)
+
+Dynamic exploration–exploitation scheduling
+
+Other multi-objective acquisition strategies
+
+Long-term roadmap
+Classical regression benchmark (current)
+
+Improved acquisition functions
+
+Representation comparison
+
+Morgan
+
+RDKit descriptors
+
+Molecular embeddings
+
+Deep learning
+
+Compound–target modelling
+
+Target-aware active learning
+
+Molecular generation
+
+
+Entry 15 — UCB Acquisition Benchmark
+15/07/2026
+
+Objective
+Generalize the previously implemented UCB acquisition strategy and evaluate how the exploration parameter β affects the prediction–discovery trade-off across multiple targets.
+
+Methodological improvements
+Implemented a normalized Upper Confidence Bound (UCB) acquisition function.
+
+Prediction and uncertainty are independently normalized using robust statistics (median and IQR).
+
+Acquisition score defined as
+
+𝑆=𝑦_𝑛𝑜𝑟𝑚+𝛽𝜎_𝑛𝑜𝑟𝑚S
+​
+ 
+where β controls the contribution of uncertainty.
+
+Verified mathematically that β=0 reproduces the Greedy strategy exactly.
+
+Experimental setup
+Regression
+
+Random Forest
+
+Morgan fingerprints
+
+10 targets
+
+10 random seeds
+
+10 acquisition rounds
+
+Initial labeled molecules: 20
+
+Batch size: 10
+
+β values evaluated:
+
+￼
+0
+0.25
+0.5
+1
+2
+5
+Main observations
+Increasing β consistently improves predictive performance (RMSE, R² and Pearson correlation), while 
+gradually reducing lead discovery performance.
+
+The transition is smooth across all targets.
+
+Small uncertainty contributions (β≈0.25–0.5) improve prediction while fully preserving, and in 
+aggregate slightly improving, Top-20 lead discovery.
+
+Large β values continue improving prediction but progressively sacrifice lead discovery.
+
+Multi-target summary
+Across the ten targets:
+
+β=0.25 improves RMSE on 8/10 targets while preserving Top-20 discovery on all targets.
+
+β=0.5 improves RMSE on 9/10 targets while preserving Top-20 discovery on all targets.
+
+β≥1 improves RMSE on every target, but discovery preservation begins to decrease.
+
+This suggests that small uncertainty contributions provide nearly "free" improvements in prediction.
+
+Conclusions
+The limitation of the current framework is no longer the acquisition function itself.
+
+Future work should focus on improving the quality of uncertainty estimates rather than modifying the 
+weighting scheme.
+
+Testing additional uncertainty-capable regression models (Extra Trees, Bayesian Ridge, etc.) has been 
+scheduled as future work.
+
+Entry 16 — Modular Acquisition Engine
+15/07/2026
+
+Motivation
+The number of acquisition strategies was growing (Greedy, Uncertainty, UCB, Uncertainty+Diversity).
+
+Rather than implementing a new strategy for every idea, the acquisition process was redesigned into a 
+modular scoring framework.
+
+New architecture
+The acquisition workflow is now decomposed into three independent layers:
+
+￼
+Criteria
+↓
+
+Weighted acquisition engine
+↓
+
+Batch selection
+Acquisition criteria
+Implemented as lightweight interchangeable classes.
+
+Current criteria:
+
+PredictionCriterion
+
+UncertaintyCriterion
+
+Each criterion declares:
+
+name
+
+direction
+
+normalization
+
+weight
+
+while exposing only a raw_score() method.
+
+Weighted acquisition engine
+Responsibilities:
+
+compute raw criterion scores
+
+handle maximization/minimization
+
+normalize each criterion
+
+apply criterion weights
+
+compute the final acquisition score
+
+Current normalization:
+
+robust (median + IQR)
+
+Batch selection
+Separated from scoring.
+
+Current implementation:
+
+TopKBatchSelector
+
+Future:
+
+DiverseTopKBatchSelector
+
+This separation keeps diversity as a batch-level optimization rather than a molecular property.
+
+Validation
+Exact-equivalence tests were implemented.
+
+Verified that:
+
+Prediction-only reproduces Greedy.
+
+Uncertainty-only reproduces Uncertainty.
+
+Prediction + β·Uncertainty reproduces UCB.
+
+All tested β values generated identical selected molecules compared with the previous implementation.
+
+This validates the abstraction independently of scientific behaviour.
+
+Future direction
+The acquisition engine is now considered stable.
+
+Future developments will consist of adding new scientific criteria rather than creating new acquisition algorithms.
+
+Potential future criteria include:
+
+novelty
+
+synthetic accessibility
+
+toxicity
+
+drug-likeness
+
+protein descriptors
+
+target similarity
+
+This architecture naturally supports multi-objective molecular prioritization.
+
+
+
+Entry 17 — Regression Surrogate Benchmark and Model Abstraction
+
+27/07/2026
+
+Objective
+
+The initial regression framework relied primarily on Random Forest models, which provided strong 
+predictive performance but only a limited notion of predictive uncertainty.
+
+Although this was sufficient to introduce Upper Confidence Bound acquisition, it restricted the 
+interpretation of uncertainty and prevented systematic comparisons between different regression algorithms.
+
+The objective of this milestone was therefore twofold:
+
+redesign the regression framework around a common surrogate-model interface;
+benchmark multiple regression models under identical active-learning conditions.
+
+This transition moves the project from evaluating a single regression pipeline to studying the behaviour 
+of uncertainty-aware surrogate models for molecular affinity optimization.
+
+Regression Model Interface
+
+A common abstraction was introduced for all regression models.
+
+Every surrogate now exposes the same interface:
+
+fit()
+
+predict()
+
+predict_with_uncertainty()
+
+Deterministic regressors return a point prediction, while probabilistic models additionally estimate predictive
+uncertainty.
+
+This abstraction allows acquisition strategies to operate independently of the underlying regression algorithm.
+
+Consequently, adding a new surrogate model now requires implementing only the model-specific prediction logic 
+without modifying the active-learning engine.
+
+Surrogate Models
+
+The benchmark currently includes eight regression algorithms representing different modelling philosophies.
+
+Linear models
+
+Linear Regression
+Bayesian Ridge
+
+Tree ensembles
+
+Random Forest
+Extra Trees
+Gradient Boosting
+HistGradientBoosting
+
+Instance-based methods
+
+K-Nearest Neighbours
+
+Probabilistic models
+
+Gaussian Process Regression
+
+The selected models cover deterministic, ensemble and probabilistic approaches while remaining 
+computationally practical for repeated active-learning simulations.
+
+Experimental Design
+
+The benchmark was performed on the EGFR affinity dataset.
+
+Configuration:
+
+Upper Confidence Bound acquisition
+20 independent random seeds
+20 acquisition rounds
+identical initialization
+identical molecular representation
+identical acquisition workflow
+
+This experimental design isolates the effect of the surrogate model itself while keeping every other component fixed.
+
+Effect of the Exploration Parameter
+
+To investigate how uncertainty influences acquisition behaviour, the benchmark compared two exploration settings:
+
+β = 1
+β = 2
+
+For each surrogate model, predictive performance and molecular discovery were evaluated using:
+
+RMSE
+MAE
+R²
+Pearson correlation
+Best discovered affinity
+Mean discovered affinity
+Top-20 discovered affinity
+Results
+
+The comparison revealed a consistent trade-off between prediction and molecular discovery.
+
+For uncertainty-aware models such as Bayesian Ridge and Gaussian Process Regression, increasing β generally 
+improved predictive performance.
+
+Lower prediction errors and stronger correlations were obtained by assigning greater weight to predictive 
+uncertainty during acquisition.
+
+However, the same increase in exploration often reduced the affinity of the best compounds discovered during
+the campaign.
+
+In contrast, several deterministic models showed little or no sensitivity to the tested β values, suggesting 
+that their uncertainty estimates contributed only marginally to the acquisition score under the current implementation.
+
+Rather than identifying a universally optimal exploration parameter, the benchmark demonstrates that the 
+appropriate balance between exploration and exploitation depends on both the surrogate model and the scientific objective.
+
+Lessons Learned
+
+The quality of uncertainty estimation is at least as important as the acquisition function itself.
+
+Once the acquisition framework became sufficiently flexible, differences between surrogate models emerged as 
+a dominant source of variation in active-learning behaviour.
+
+The newly introduced abstraction considerably simplifies future methodological developments by allowing new 
+regression models to be evaluated without modifying the remainder of the workflow.
+
+Next Milestone
+
+The current framework prioritizes molecules exclusively according to predicted affinity and uncertainty.
+
+The next stage will extend candidate evaluation through chemically meaningful descriptors, including novelty, 
+structural diversity, drug-likeness, synthetic accessibility and structural safety alerts.
+
+These properties will ultimately support multi-objective molecular prioritization and more realistic active-learning 
+campaigns.
