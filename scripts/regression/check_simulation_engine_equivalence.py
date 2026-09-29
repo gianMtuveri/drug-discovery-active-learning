@@ -4,7 +4,10 @@ import numpy as np
 import pandas as pd
 
 from src.data.targets import load_target_regression
-from src.regression.simulation import run_regression_simulation
+from src.regression.simulation import (
+    concatenate_simulation_histories,
+    run_regression_simulation,
+)
 
 
 METRICS = [
@@ -88,10 +91,7 @@ def main():
 
         generated.append(history)
 
-    new = pd.concat(
-        generated,
-        ignore_index=True,
-    ).sort_values(
+    new = concatenate_simulation_histories(generated).sort_values(
         ["seed", "round"]
     ).reset_index(drop=True)
 

@@ -63,6 +63,31 @@ METRICS: Mapping[str, MetricSpec] = {
         "round_runtime_vs_round.png",
         False,
     ),
+    "joint_discovery_count": MetricSpec(
+        "Cumulative joint discoveries",
+        "joint_discovery_vs_round.png",
+        True,
+    ),
+    "joint_discovery_auc": MetricSpec(
+        "Joint-discovery curve AUC",
+        "joint_discovery_auc_vs_round.png",
+        True,
+    ),
+    "affinity_discovery_count": MetricSpec(
+        "Cumulative affinity-only discoveries",
+        "affinity_discovery_vs_round.png",
+        True,
+    ),
+    "joint_scaffold_count": MetricSpec(
+        "Distinct qualifying scaffolds",
+        "joint_scaffold_discovery_vs_round.png",
+        True,
+    ),
+    "joint_diversity": MetricSpec(
+        "Mean pairwise Tanimoto distance",
+        "joint_diversity_vs_round.png",
+        True,
+    ),
 }
 
 

@@ -1,3 +1,32 @@
+## [0.5.0] - 2026-09-29
+
+### Added
+
+- Added structure-derived QED calculation and molecular-identity alignment to
+  target preprocessing and regression data loading.
+- Added `ucb_qed`, `ucb_diversity`, and `ucb_qed_diversity` acquisition
+  strategies alongside the existing UCB strategy.
+- Added diversity-aware batch construction within a high-priority acquisition
+  shortlist using Morgan-fingerprint Tanimoto distance.
+- Added affinity-only and joint affinity/QED discovery endpoints, discovery
+  curve AUC, qualifying Bemis-Murcko scaffold counts, and acquired-molecule
+  diversity metrics.
+- Added a metadata-driven v0.5 benchmark analysis pipeline with endpoint
+  validation and seed-matched strategy comparisons.
+- Added focused tests for QED preprocessing, molecular alignment, v0.5
+  acquisition, evaluation, history aggregation, and benchmark analysis.
+
+### Changed
+
+- Organized v0.5 benchmark and analysis paths under the established
+  `results/regression/` hierarchy and publication figures under
+  `results/figures/regression/`.
+- Made repeated-history aggregation robust to DataFrame attributes containing
+  array-valued campaign provenance.
+- Updated regression plotting and publication scripts with v0.5 metrics,
+  canonical output names, and explicit output-path overrides.
+
+
 ## [0.4.0] - 2026-07-27
 
 ### Added

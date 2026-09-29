@@ -12,6 +12,7 @@ import pandas as pd
 
 from src.data.targets import load_target_regression
 from src.regression.simulation import (
+    concatenate_simulation_histories,
     run_regression_simulation,
 )
 
@@ -834,10 +835,7 @@ def main() -> None:
             "seeds."
         )
 
-    history = pd.concat(
-        campaign_checkpoints,
-        ignore_index=True,
-    )
+    history = concatenate_simulation_histories(campaign_checkpoints)
 
     summary = summarize_learning_curve(
         history

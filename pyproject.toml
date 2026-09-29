@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "active-learning-drug-discovery"
-version = "0.1.0"
+version = "0.5.0"
 description = "A research-oriented framework to study active learning strategies for drug discovery."
 readme = "README.md"
 requires-python = ">=3.10"

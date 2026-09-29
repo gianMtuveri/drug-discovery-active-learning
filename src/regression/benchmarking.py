@@ -18,6 +18,14 @@ SUMMARY_METRICS = [
     "mean_discovered",
 ]
 
+V05_DISCOVERY_METRICS = [
+    "joint_discovery_count",
+    "joint_discovery_auc",
+    "affinity_discovery_count",
+    "joint_scaffold_count",
+    "joint_diversity",
+]
+
 IDENTIFIER_COLUMNS = [
     "target",
     "model",
@@ -514,6 +522,7 @@ def save_benchmark_config(
 
 ROUND_SUMMARY_METRICS = [
     *SUMMARY_METRICS,
+    *V05_DISCOVERY_METRICS,
     "fraction_best_found",
     "distance_to_best",
     "selected_mean_prediction",

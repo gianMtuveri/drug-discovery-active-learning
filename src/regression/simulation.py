@@ -1,12 +1,20 @@
+import json
 import time
 
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import train_test_split
 
-from src.regression.evaluation import evaluate_regression
+from src.regression.evaluation import (
+    bemis_murcko_scaffolds,
+    cumulative_curve_auc,
+    evaluate_acquired_molecules,
+    evaluate_regression,
+)
 
 from src.active_learning.batch_selection import TopKBatchSelector
+from src.active_learning.batch_selection import BatchSelectionResult
+from src.active_learning.acquisition import WeightedAcquisitionResult
 from src.active_learning.criteria import AcquisitionContext
 from src.active_learning.factories import (
     make_prediction_engine,
@@ -21,7 +29,28 @@ from src.regression.selection import (#legacy
     #select_ucb,                       #obsolete
     #select_uncertainty,               #obsolete
     select_uncertainty_diverse,
+    acquisition_scores,
+    select_acquisition_diverse,
+    select_acquisition_topk,
 )
+
+
+V05_ACQUISITION_STRATEGIES = {
+    "ucb",
+    "ucb_qed",
+    "ucb_diversity",
+    "ucb_qed_diversity",
+}
+
+
+def concatenate_simulation_histories(
+    histories: list[pd.DataFrame],
+) -> pd.DataFrame:
+    """Concatenate histories without per-campaign debug provenance."""
+    for history in histories:
+        history.attrs.clear()
+
+    return pd.concat(histories, ignore_index=True)
 
 
 def select_with_modular_engine(
@@ -91,6 +120,10 @@ def run_regression_simulation(
     X: np.ndarray,
     y: np.ndarray,
     strategy: str,
+    qed: np.ndarray | None = None,
+    affinity_nm: np.ndarray | None = None,
+    canonical_smiles: np.ndarray | None = None,
+    scaffolds: np.ndarray | None = None,
     model_name: str = "random_forest",
     random_state: int = 42,
     n_initial: int = 20,
@@ -105,14 +138,39 @@ def run_regression_simulation(
 
     dataset_best = float(np.max(y))
 
-    if strategy == "ucb":
+    if strategy in V05_ACQUISITION_STRATEGIES:
         if beta is None:
-            raise ValueError(
-                "beta must be provided when strategy='ucb'."
-            )
+            beta = 2.0
 
         if beta < 0:
             raise ValueError("beta must be non-negative.")
+
+    if strategy in {"ucb_qed", "ucb_qed_diversity"}:
+        if qed is None:
+            raise ValueError(f"QED values are required for strategy='{strategy}'.")
+        qed = np.asarray(qed, dtype=float)
+        if qed.ndim != 1 or len(qed) != len(y):
+            raise ValueError("QED must be one-dimensional and aligned with X and y.")
+
+    evaluation_enabled = affinity_nm is not None or canonical_smiles is not None
+    if evaluation_enabled:
+        if affinity_nm is None or canonical_smiles is None or qed is None:
+            raise ValueError(
+                "Evaluation requires aligned affinity_nm, canonical_smiles, and QED."
+            )
+        affinity_nm = np.asarray(affinity_nm, dtype=float)
+        canonical_smiles = np.asarray(canonical_smiles, dtype=str)
+        qed = np.asarray(qed, dtype=float)
+        if not (
+            len(X) == len(y) == len(qed) == len(affinity_nm) == len(canonical_smiles)
+        ):
+            raise ValueError("Evaluation arrays must have identical molecular alignment.")
+        if scaffolds is None:
+            scaffolds = bemis_murcko_scaffolds(canonical_smiles)
+        else:
+            scaffolds = np.asarray(scaffolds, dtype=str)
+            if len(scaffolds) != len(y):
+                raise ValueError("Scaffolds must be aligned with the molecular arrays.")
 
     pool_indices, test_indices = train_test_split(
         np.arange(len(y)),
@@ -125,6 +183,7 @@ def run_regression_simulation(
         size=min(n_initial, len(pool_indices)),
         replace=False,
     )
+    initial_labeled_indices = labeled_indices.copy()
 
     unlabeled_indices = np.setdiff1d(
         pool_indices,
@@ -148,6 +207,18 @@ def run_regression_simulation(
     last_batch_mean_uncertainty_contribution = np.nan
 
     history = []
+    acquired_batches = []
+    discovery_measurements = [0]
+    joint_discovery_curve = [0]
+
+    if evaluation_enabled:
+        initial_endpoints = evaluate_acquired_molecules(
+            acquired_indices=initial_labeled_indices,
+            affinity_nm=affinity_nm,
+            qed=qed,
+            fingerprints=X,
+            scaffolds=scaffolds,
+        )
 
     for round_idx in range(n_rounds + 1):
         round_start = time.perf_counter()
@@ -173,14 +244,13 @@ def run_regression_simulation(
 
         discovered = y[labeled_indices]
 
-        history.append(
-            {
+        history_row = {
                 "round": round_idx,
                 "strategy": strategy,
                 "model": model_name,
                 "beta": (
                     beta
-                    if strategy == "ucb"
+                    if strategy in V05_ACQUISITION_STRATEGIES
                     else np.nan
                 ),
                 "seed": random_state,
@@ -241,7 +311,71 @@ def run_regression_simulation(
                     last_batch_mean_uncertainty_contribution
                 ),
             }
-        )
+
+        if evaluation_enabled:
+            newly_acquired = (
+                acquired_batches[-1]
+                if acquired_batches
+                else np.array([], dtype=int)
+            )
+            cumulative_acquired = (
+                np.concatenate(acquired_batches)
+                if acquired_batches
+                else np.array([], dtype=int)
+            )
+            endpoints = evaluate_acquired_molecules(
+                acquired_indices=cumulative_acquired,
+                affinity_nm=affinity_nm,
+                qed=qed,
+                fingerprints=X,
+                scaffolds=scaffolds,
+            )
+            if round_idx > 0:
+                discovery_measurements.append(len(cumulative_acquired))
+                joint_discovery_curve.append(endpoints["joint_discovery_count"])
+
+            history_row.update(
+                {
+                    "n_initial_labeled": len(initial_labeled_indices),
+                    "n_newly_acquired": len(newly_acquired),
+                    "n_cumulative_acquired": len(cumulative_acquired),
+                    "initial_affinity_discovery_count": initial_endpoints[
+                        "affinity_discovery_count"
+                    ],
+                    "initial_joint_discovery_count": initial_endpoints[
+                        "joint_discovery_count"
+                    ],
+                    "affinity_discovery_count": endpoints[
+                        "affinity_discovery_count"
+                    ],
+                    "joint_discovery_count": endpoints["joint_discovery_count"],
+                    "joint_discovery_auc": cumulative_curve_auc(
+                        discovery_measurements,
+                        joint_discovery_curve,
+                    ),
+                    "joint_scaffold_count": endpoints["joint_scaffold_count"],
+                    "joint_diversity": endpoints["joint_diversity"],
+                    "initial_labeled_indices": json.dumps(
+                        initial_labeled_indices.tolist()
+                    ),
+                    "newly_acquired_indices": json.dumps(newly_acquired.tolist()),
+                    "cumulative_acquired_indices": json.dumps(
+                        cumulative_acquired.tolist()
+                    ),
+                    "newly_acquired_smiles": json.dumps(
+                        canonical_smiles[newly_acquired].tolist()
+                    ),
+                    "newly_acquired_affinity_nm": json.dumps(
+                        affinity_nm[newly_acquired].tolist()
+                    ),
+                    "newly_acquired_qed": json.dumps(qed[newly_acquired].tolist()),
+                    "joint_qualifying_indices": json.dumps(
+                        endpoints["joint_qualifying_indices"].tolist()
+                    ),
+                }
+            )
+
+        history.append(history_row)
 
         if (
             round_idx == n_rounds
@@ -278,7 +412,6 @@ def run_regression_simulation(
         elif strategy in {
             "greedy",
             "uncertainty",
-            "ucb",
         }:
             acquisition_result, batch_result = (
                 select_with_modular_engine(
@@ -293,7 +426,63 @@ def run_regression_simulation(
             )
 
             selected = batch_result.selected_indices
-            
+
+        elif strategy in V05_ACQUISITION_STRATEGIES:
+            pool_qed = (
+                qed[unlabeled_indices]
+                if strategy in {"ucb_qed", "ucb_qed_diversity"}
+                else None
+            )
+            scores = acquisition_scores(
+                predicted_mean,
+                predicted_uncertainty,
+                qed=pool_qed,
+                beta=beta,
+            )
+            base_result = make_ucb_engine(
+                beta=beta,
+                normalization="robust",
+            ).evaluate(
+                AcquisitionContext(
+                    unlabeled_indices=unlabeled_indices,
+                    predicted_mean=predicted_mean,
+                    predicted_uncertainty=predicted_uncertainty,
+                    X_pool=X[unlabeled_indices],
+                )
+            )
+            acquisition_result = WeightedAcquisitionResult(
+                unlabeled_indices=base_result.unlabeled_indices,
+                combined_scores=scores,
+                criterion_evaluations=base_result.criterion_evaluations,
+            )
+
+            if strategy in {"ucb_diversity", "ucb_qed_diversity"}:
+                selected = select_acquisition_diverse(
+                    X=X,
+                    unlabeled_indices=unlabeled_indices,
+                    labeled_indices=labeled_indices,
+                    scores=scores,
+                    batch_size=batch_size,
+                    candidate_pool_size=50,
+                )
+                selected_positions = np.asarray(
+                    [
+                        np.flatnonzero(unlabeled_indices == index)[0]
+                        for index in selected
+                    ],
+                    dtype=int,
+                )
+                batch_result = BatchSelectionResult(
+                    selected_indices=selected,
+                    selected_pool_positions=selected_positions,
+                    selected_combined_scores=scores[selected_positions],
+                )
+            else:
+                batch_result = TopKBatchSelector().select(
+                    acquisition_result,
+                    batch_size=batch_size,
+                )
+                selected = batch_result.selected_indices
 
         elif strategy == "uncertainty_diverse":
             selected = select_uncertainty_diverse(
@@ -411,6 +600,7 @@ def run_regression_simulation(
         )
 
         selected_true_affinity = y[selected]
+        acquired_batches.append(selected.copy())
 
         # These values will be written into the next history row.
         last_batch_mean_prediction = float(
@@ -443,4 +633,10 @@ def run_regression_simulation(
             time.perf_counter() - round_start
         )
 
-    return pd.DataFrame(history)
+    result = pd.DataFrame(history)
+    # Test/debug provenance without changing the persisted history schema.
+    result.attrs["pool_indices"] = pool_indices.copy()
+    result.attrs["test_indices"] = test_indices.copy()
+    result.attrs["initial_labeled_indices"] = initial_labeled_indices
+    result.attrs["acquired_batches"] = acquired_batches
+    return result

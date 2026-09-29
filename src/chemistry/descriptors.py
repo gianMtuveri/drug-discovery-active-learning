@@ -1,6 +1,6 @@
 import pandas as pd
 from rdkit import Chem
-from rdkit.Chem import Descriptors, rdMolDescriptors
+from rdkit.Chem import Descriptors, QED, rdMolDescriptors
 
 
 def compute_basic_descriptors(smiles_list):
@@ -18,9 +18,17 @@ def compute_basic_descriptors(smiles_list):
         if mol is None:
             continue
 
+        try:
+            qed = QED.qed(mol)
+        except (ArithmeticError, RuntimeError, ValueError):
+            # Keep the failed value explicit so the preprocessing pipeline can
+            # exclude it and report the reason; never substitute a prediction.
+            qed = float("nan")
+
         rows.append(
             {
                 "index": idx,
+                "canonical_smiles": Chem.MolToSmiles(mol, canonical=True),
                 "MolWt": Descriptors.MolWt(mol),
                 "LogP": Descriptors.MolLogP(mol),
                 "TPSA": rdMolDescriptors.CalcTPSA(mol),
@@ -29,6 +37,7 @@ def compute_basic_descriptors(smiles_list):
                 "RotatableBonds": rdMolDescriptors.CalcNumRotatableBonds(mol),
                 "RingCount": rdMolDescriptors.CalcNumRings(mol),
                 "FractionCSP3": rdMolDescriptors.CalcFractionCSP3(mol),
+                "QED": qed,
             }
         )
 

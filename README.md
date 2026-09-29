@@ -8,7 +8,11 @@
 
 This repository implements a modular framework for investigating active learning in molecular discovery through retrospective simulations on curated BindingDB datasets.
 
-Starting from binary activity classification and extending toward continuous affinity prediction, the project explores how acquisition strategies, predictive models, uncertainty estimation and molecular representations influence sequential experimental design.
+Starting from binary activity classification, extending through continuous
+affinity prediction with uncertainty, and now supporting multi-objective
+molecular prioritisation, the project explores how acquisition strategies,
+predictive models, uncertainty estimation and molecular representations
+influence sequential experimental design.
 
 Rather than presenting a single optimized pipeline, the framework has been developed incrementally. Each methodological extension addresses a limitation identified in the previous implementation, allowing new ideas to be evaluated in isolation before becoming part of the complete workflow.
 
@@ -24,6 +28,7 @@ Current capabilities include:
 - Eight interchangeable regression models
 - Upper Confidence Bound acquisition
 - Comparative regression benchmarking
+- Multi-objective affinity, QED and diversity-aware prioritisation
 
 The long-term objective is to provide a transparent and extensible framework for studying decision-making under constrained experimental budgets while progressively extending the workflow toward closed-loop molecular discovery.
 
@@ -280,6 +285,45 @@ These experiments highlight a model-dependent trade-off between surrogate
 accuracy and compound discovery rather than identifying a universally
 optimal exploration strategy.
 
+### Multi-objective molecular prioritisation
+
+Version 0.5 separates three decisions that are often conflated:
+
+- the **predictive model**, which estimates affinity and uncertainty;
+- the **acquisition objective**, which determines how candidates are scored;
+- **batch composition**, which can favour chemical diversity among
+  high-priority candidates.
+
+The v0.5 regression benchmark supports four acquisition strategies:
+
+- `ucb` — the existing affinity/uncertainty UCB objective;
+- `ucb_qed` — UCB augmented with QED;
+- `ucb_diversity` — UCB followed by diversity-aware batch construction;
+- `ucb_qed_diversity` — the combined QED and diversity-aware strategy.
+
+The existing v0.4 UCB calculation is preserved. In the v0.5 protocol,
+prediction and uncertainty are robust-scaled and combined with `beta = 2`,
+then the final UCB score is min-max normalized. QED is added with
+`lambda_Q = 0.5` for QED-aware strategies.
+
+QED is a structure-derived, 0–1 estimate of molecular drug-likeness that is
+available before experimental acquisition. It is not a prediction of
+affinity, efficacy, safety or clinical success. QED is used only as an
+acquisition objective and is not supplied to the surrogate model as an input
+feature.
+
+For diversity-aware strategies, candidates are first restricted to the 50
+highest-priority acquisition scores. The highest-scoring candidate is selected
+first; the remainder of the batch is selected greedily by maximum minimum
+Morgan-fingerprint Tanimoto distance from both labelled molecules and the
+current batch. Diversity therefore shapes a high-priority shortlist rather
+than performing unrestricted global chemical-space exploration.
+
+Evaluation retains held-out RMSE and Pearson correlation and adds
+affinity-only discovery, joint affinity/QED discovery, joint-discovery curve
+AUC, qualifying Bemis–Murcko scaffold count and pairwise Tanimoto diversity.
+The experimental joint criterion is affinity ≤ 500 nM and QED ≥ 0.6.
+
 ---
 
 # Evaluation philosophy
@@ -384,6 +428,42 @@ Typical workflow:
 4. Execute an uncertainty-aware acquisition campaign.
 5. Evaluate predictive and acquisition performance.
 
+## v0.5 multi-objective regression workflow
+
+Prepare the aligned EGFR fingerprints, regression targets and QED values:
+
+```bash
+python scripts/preprocessing/prepare_target.py --target EGFR
+```
+
+Run the four benchmark strategies. Each strategy is written to its own
+directory below `results/regression/benchmarks/v050_egfr/`:
+
+```bash
+for strategy in ucb ucb_qed ucb_diversity ucb_qed_diversity; do
+    python scripts/regression/benchmark_surrogates.py \
+        --target EGFR \
+        --strategy "$strategy" \
+        --beta 2 \
+        --seeds 20 \
+        --rounds 20
+done
+```
+
+Analyze the saved benchmark artifacts:
+
+```bash
+python scripts/regression/analyze_v050_benchmark.py \
+    --input results/regression/benchmarks/v050_egfr \
+    --output results/regression/analysis/v050_egfr
+```
+
+The analysis validates model and strategy identities from saved metadata and
+history, checks endpoint consistency, and produces seed-matched paired strategy
+comparisons. Generated results are local artifacts and are not distributed
+through Git; use the pipeline above to reproduce them. Both benchmark and
+analysis commands support explicit output-path overrides.
+
 ---
 
 # Roadmap
@@ -410,20 +490,18 @@ Current developments focus on extending the framework along four complementary d
 
 ### Molecular prioritization
 
-Future work will extend candidate evaluation beyond predicted affinity
-through chemically meaningful molecular properties, including:
+The current regression workflow supports QED-aware and diversity-aware
+multi-objective prioritisation. Future work can extend candidate evaluation
+with additional chemically meaningful molecular properties, including:
 
 -Physicochemical descriptors
 -Novelty estimation
 -Chemical diversity
--Drug-likeness
+-Additional drug-likeness descriptors
 -Structural safety alerts
 -Synthetic accessibility
--Multi-objective acquisition
-
-These descriptors will provide the basis for future multi-objective
-acquisition strategies capable of balancing affinity, novelty,
-developability and chemical diversity.
+These descriptors can extend the current multi-objective framework toward
+additional measures of novelty, developability and chemical diversity.
 
 ---
 

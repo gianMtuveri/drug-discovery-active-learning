@@ -120,6 +120,108 @@ def select_ucb(
     return unlabeled_indices[order[:batch_size]]
 
 
+def normalized_ucb_scores(
+    predicted_affinity: np.ndarray,
+    uncertainty: np.ndarray,
+    beta: float = 2.0,
+) -> np.ndarray:
+    """Return v0.5 UCB scores after final candidate-pool min-max scaling.
+
+    The pre-existing UCB calculation is deliberately retained: prediction
+    and uncertainty are each robust-scaled before being combined.  Min-max
+    scaling the final score does not alter its ranking.
+    """
+    if beta < 0:
+        raise ValueError("beta must be non-negative.")
+
+    predicted_affinity = np.asarray(predicted_affinity, dtype=float)
+    uncertainty = np.asarray(uncertainty, dtype=float)
+    if predicted_affinity.ndim != 1 or uncertainty.ndim != 1:
+        raise ValueError("UCB inputs must be one-dimensional.")
+    if len(predicted_affinity) != len(uncertainty):
+        raise ValueError("UCB inputs must have equal length.")
+
+    raw_ucb = robust_scale(predicted_affinity) + beta * robust_scale(uncertainty)
+    return (raw_ucb - np.min(raw_ucb)) / (np.max(raw_ucb) - np.min(raw_ucb))
+
+
+def acquisition_scores(
+    predicted_affinity: np.ndarray,
+    uncertainty: np.ndarray,
+    qed: np.ndarray | None = None,
+    beta: float = 2.0,
+) -> np.ndarray:
+    """Calculate normalized UCB, optionally augmented by raw RDKit QED."""
+    scores = normalized_ucb_scores(predicted_affinity, uncertainty, beta)
+    if qed is None:
+        return scores
+
+    qed = np.asarray(qed, dtype=float)
+    if qed.ndim != 1 or len(qed) != len(scores):
+        raise ValueError("QED must be one-dimensional and aligned with UCB scores.")
+    return scores + 0.5 * qed
+
+
+def select_acquisition_topk(
+    unlabeled_indices: np.ndarray,
+    scores: np.ndarray,
+    batch_size: int = 10,
+) -> np.ndarray:
+    """Select by score using the pipeline's existing stable-reverse ordering."""
+    unlabeled_indices = np.asarray(unlabeled_indices)
+    scores = np.asarray(scores, dtype=float)
+    if len(unlabeled_indices) != len(scores):
+        raise ValueError("Candidate indices and scores must have equal length.")
+    order = np.argsort(scores, kind="stable")[::-1]
+    return unlabeled_indices[order[: min(batch_size, len(order))]]
+
+
+def select_acquisition_diverse(
+    X: np.ndarray,
+    unlabeled_indices: np.ndarray,
+    labeled_indices: np.ndarray,
+    scores: np.ndarray,
+    batch_size: int = 10,
+    candidate_pool_size: int = 50,
+) -> np.ndarray:
+    """Greedily maximize minimum Tanimoto distance within a scored shortlist.
+
+    The first molecule is the highest-scoring candidate.  Remaining ties are
+    resolved by shortlist order (score order, with the legacy reverse-stable
+    convention for exact score ties), making selection deterministic.
+    """
+    X = np.asarray(X)
+    unlabeled_indices = np.asarray(unlabeled_indices, dtype=int)
+    labeled_indices = np.asarray(labeled_indices, dtype=int)
+    scores = np.asarray(scores, dtype=float)
+    if len(unlabeled_indices) != len(scores):
+        raise ValueError("Candidate indices and scores must have equal length.")
+    if batch_size <= 0 or candidate_pool_size <= 0:
+        raise ValueError("Batch and candidate-pool sizes must be positive.")
+
+    order = np.argsort(scores, kind="stable")[::-1]
+    shortlist = unlabeled_indices[order[: min(candidate_pool_size, len(order))]]
+    n_select = min(batch_size, len(shortlist))
+    if n_select == 0:
+        return np.array([], dtype=int)
+
+    selected = [int(shortlist[0])]
+    while len(selected) < n_select:
+        remaining = shortlist[~np.isin(shortlist, selected)]
+        references = np.concatenate([labeled_indices, np.asarray(selected)])
+
+        candidate_fp = X[remaining].astype(bool, copy=False)
+        reference_fp = X[references].astype(bool, copy=False)
+        intersections = candidate_fp.astype(np.uint16) @ reference_fp.T.astype(np.uint16)
+        candidate_counts = candidate_fp.sum(axis=1)[:, None]
+        reference_counts = reference_fp.sum(axis=1)[None, :]
+        similarities = intersections / (candidate_counts + reference_counts - intersections)
+        min_distances = 1.0 - similarities.max(axis=1)
+        selected.append(int(remaining[np.argmax(min_distances)]))
+
+    return np.asarray(selected, dtype=int)
+
+
 def select_uncertainty_diverse(
     X: np.ndarray,
     unlabeled_indices: np.ndarray,

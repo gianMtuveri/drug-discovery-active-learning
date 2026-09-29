@@ -3,7 +3,6 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
-from matplotlib.units import registry
 import numpy as np
 import pandas as pd
 import yaml
@@ -37,8 +36,11 @@ def filter_target(df, query, match="contains"):
     return df.loc[mask].copy()
 
 
-def save_compressed_fingerprints(path, X):
-    np.savez_compressed(path, X=X)
+def save_compressed_fingerprints(path, X, canonical_smiles=None):
+    arrays = {"X": X}
+    if canonical_smiles is not None:
+        arrays["canonical_smiles"] = np.asarray(canonical_smiles, dtype=str)
+    np.savez_compressed(path, **arrays)
 
 
 def prepare_target(
@@ -80,29 +82,52 @@ def prepare_target(
     descriptors_path = target_dir / "descriptors.parquet"
     metadata_path = target_dir / "metadata.json"
 
-    target_df.to_parquet(clean_path, index=False)
-
-    X, valid_indices = featurize_smiles(
+    X_valid_structure, valid_structure_indices = featurize_smiles(
         target_df["canonical_smiles"].tolist(),
         radius=radius,
         n_bits=n_bits,
     )
 
-    affinity_values = target_df.iloc[valid_indices]["aff_nM_median"].to_numpy()
+    structure_df = target_df.iloc[valid_structure_indices].copy()
+    structure_df["_fingerprint_row"] = np.arange(len(structure_df))
+
+    descriptors = compute_basic_descriptors(
+        structure_df["canonical_smiles"].tolist()
+    )
+    descriptors = descriptors.rename(columns={"index": "_structure_row"})
+
+    affinity_values = pd.to_numeric(
+        structure_df["aff_nM_median"], errors="coerce"
+    ).to_numpy(dtype=float)
+    finite_affinity = np.isfinite(affinity_values) & (affinity_values > 0)
+    qed_values = descriptors["QED"].to_numpy(dtype=float)
+    valid_qed = np.isfinite(qed_values) & (qed_values >= 0) & (qed_values <= 1)
+
+    # Descriptor calculation uses the same RDKit parsing as fingerprinting. Keep
+    # this explicit mapping so every exclusion is applied identically to all files.
+    descriptor_rows = descriptors["_structure_row"].to_numpy(dtype=int)
+    retained_descriptor_mask = finite_affinity[descriptor_rows] & valid_qed
+    descriptors = descriptors.loc[retained_descriptor_mask].reset_index(drop=True)
+    retained_structure_rows = descriptors.pop("_structure_row").to_numpy(dtype=int)
+    retained_df = structure_df.iloc[retained_structure_rows].copy()
+    fingerprint_rows = retained_df.pop("_fingerprint_row").to_numpy(dtype=int)
+    X = X_valid_structure[fingerprint_rows]
+    affinity_values = retained_df["aff_nM_median"].to_numpy(dtype=float)
+    canonical_smiles = descriptors["canonical_smiles"].to_numpy(dtype=str)
+
+    # Normalize the retained table identity to the exact canonical form stored
+    # with the descriptors and fingerprints.
+    retained_df["canonical_smiles"] = canonical_smiles
+    retained_df.to_parquet(clean_path, index=False)
 
     y = (affinity_values <= activity_threshold_nM).astype(int)
-    save_compressed_fingerprints(X_path, X)
+    save_compressed_fingerprints(X_path, X, canonical_smiles)
     np.save(y_path, y)
 
     p_affinity = 9 - np.log10(affinity_values) # pAffinity for regression tasks
     affinity_path = target_dir / "affinity.npy"
     np.save(affinity_path, p_affinity)
-
-
-
-    descriptors = compute_basic_descriptors(
-        target_df.iloc[valid_indices]["canonical_smiles"].tolist()
-    )
+    descriptors.insert(0, "index", np.arange(len(descriptors), dtype=int))
     descriptors["label"] = y
     descriptors.to_parquet(descriptors_path, index=False)
 
@@ -111,6 +136,15 @@ def prepare_target(
         "query": query,
         "n_molecules_raw": int(len(target_df)),
         "n_molecules_valid": int(len(y)),
+        "exclusions": {
+            "invalid_structure_or_fingerprint": int(
+                len(target_df) - len(valid_structure_indices)
+            ),
+            "non_finite_or_non_positive_affinity": int((~finite_affinity).sum()),
+            "invalid_qed": int(
+                (finite_affinity[descriptor_rows] & ~valid_qed).sum()
+            ),
+        },
         "active_fraction": float(y.mean()),
         "fingerprint": {
             "type": "Morgan",

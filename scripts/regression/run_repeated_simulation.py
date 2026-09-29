@@ -4,7 +4,10 @@ from pathlib import Path
 import pandas as pd
 
 from src.data.targets import load_target_regression
-from src.regression.simulation import run_regression_simulation
+from src.regression.simulation import (
+    concatenate_simulation_histories,
+    run_regression_simulation,
+)
 
 
 STRATEGIES = [
@@ -47,7 +50,7 @@ def main():
             )
             histories.append(history)
 
-    history = pd.concat(histories, ignore_index=True)
+    history = concatenate_simulation_histories(histories)
 
     summary = (
         history

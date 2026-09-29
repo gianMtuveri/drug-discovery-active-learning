@@ -5,20 +5,29 @@ from pathlib import Path
 
 import pandas as pd
 
-from src.data.targets import load_target_regression
-from src.regression.simulation import run_regression_simulation
-
-from datetime import datetime
-from pathlib import Path
+from src.data.targets import load_target_regression_evaluation
+from src.regression.evaluation import bemis_murcko_scaffolds
+from src.regression.simulation import (
+    concatenate_simulation_histories,
+    run_regression_simulation,
+)
 
 from src.regression.benchmarking import (
+    SUMMARY_METRICS,
+    V05_DISCOVERY_METRICS,
     save_benchmark_outputs,
 )
 
 DEFAULT_MODELS = [
     "random_forest",
     "extra_trees",
+    "bayesian_ridge",
+    "gaussian_process",
 ]
+
+DEFAULT_V050_BENCHMARK_ROOT = Path(
+    "results/regression/benchmarks/v050_egfr"
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -49,6 +58,10 @@ def parse_args() -> argparse.Namespace:
             "greedy",
             "uncertainty",
             "ucb",
+            "ucb_qed",
+            "ucb_diversity",
+            "ucb_qed_diversity",
+            "uncertainty_diverse",
         ],
         default="ucb",
     )
@@ -56,20 +69,20 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--beta",
         type=float,
-        default=1.0,
+        default=2.0,
         help="Exploration weight used by UCB.",
     )
 
     parser.add_argument(
         "--seeds",
         type=int,
-        default=10,
+        default=20,
     )
 
     parser.add_argument(
         "--rounds",
         type=int,
-        default=10,
+        default=20,
     )
 
     parser.add_argument(
@@ -78,7 +91,8 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help=(
             "Directory for benchmark outputs. "
-            "A timestamped directory is used by default."
+            "By default, outputs are isolated by strategy under the "
+            "canonical v0.5 EGFR benchmark directory."
         ),
     )
 
@@ -88,12 +102,16 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
 
-    X, y = load_target_regression(args.target)
+    X, y, qed, affinity_nm, canonical_smiles = (
+        load_target_regression_evaluation(args.target)
+    )
+    # Calculate scaffolds once per dataset, not once per campaign or round.
+    scaffolds = bemis_murcko_scaffolds(canonical_smiles)
 
     campaign_histories: list[pd.DataFrame] = []
 
     for model_name in args.models:
-        print(f"\nModel: {model_name}")
+        print(f"\nStrategy: {args.strategy}; model: {model_name}")
 
         for seed in range(args.seeds):
             print(
@@ -104,11 +122,18 @@ def main() -> None:
             history = run_regression_simulation(
                 X=X,
                 y=y,
+                qed=qed,
+                affinity_nm=affinity_nm,
+                canonical_smiles=canonical_smiles,
+                scaffolds=scaffolds,
                 model_name=model_name,
                 strategy=args.strategy,
                 beta=args.beta,
                 random_state=seed,
+                n_initial=20,
+                batch_size=10,
                 n_rounds=args.rounds,
+                test_size=0.2,
             ).copy()
 
             # Add explicitly even if simulation.py already records them.
@@ -121,23 +146,10 @@ def main() -> None:
             f"  Completed {args.seeds} seeds."
         )
 
-    results = pd.concat(
-        campaign_histories,
-        ignore_index=True,
-    )
+    results = concatenate_simulation_histories(campaign_histories)
 
     if args.output_dir is None:
-        timestamp = datetime.now().strftime(
-            "%Y%m%d_%H%M%S"
-        )
-
-        output_dir = Path(
-            "results/regression/benchmarks"
-        ) / (
-            f"{args.target.lower()}_"
-            f"{args.strategy}_"
-            f"{timestamp}"
-        )
+        output_dir = DEFAULT_V050_BENCHMARK_ROOT / args.strategy
     else:
         output_dir = args.output_dir
 
@@ -149,6 +161,15 @@ def main() -> None:
         "beta": args.beta,
         "seeds": args.seeds,
         "rounds": args.rounds,
+        "n_initial": 20,
+        "batch_size": 10,
+        "test_size": 0.2,
+        "activity_threshold_nm": 500.0,
+        "qed_threshold": 0.6,
+        "joint_discovery_auc_integration": "trapezoidal",
+        "joint_discovery_auc_x_axis": "cumulative newly acquired measurements",
+        "joint_diversity": "mean pairwise (1 - Tanimoto similarity)",
+        "joint_diversity_fewer_than_two": "NaN",
     }
 
 
@@ -157,6 +178,7 @@ def main() -> None:
         output_dir=output_dir,
         config=config,
         reference_model=args.models[0],
+        metrics=[*SUMMARY_METRICS, *V05_DISCOVERY_METRICS],
     )
 
 
