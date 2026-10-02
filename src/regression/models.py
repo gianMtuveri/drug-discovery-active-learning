@@ -24,7 +24,7 @@ from sklearn.neighbors import KNeighborsRegressor
 from sklearn.gaussian_process import GaussianProcessRegressor
 from sklearn.gaussian_process.kernels import (
     ConstantKernel,
-    RBF,
+    RationalQuadratic,
     WhiteKernel,
 )
 
@@ -34,15 +34,23 @@ FloatArray = NDArray[np.float64]
 
 def default_gaussian_process_kernel():
     """
-    Default kernel used by GaussianProcessSurrogate.
-
-    The kernel can be replaced in the future once benchmarking
-    identifies more suitable choices for molecular fingerprints.
+    v0.5.1 Rational Quadratic kernel used by GaussianProcessSurrogate.
     """
     return (
-        ConstantKernel(1.0)
-        * RBF(length_scale=1.0)
-        + WhiteKernel()
+        ConstantKernel(
+            constant_value=1.0,
+            constant_value_bounds=(1e-5, 1e5),
+        )
+        * RationalQuadratic(
+            length_scale=1.0,
+            alpha=1.0,
+            length_scale_bounds=(1e-5, 1e5),
+            alpha_bounds=(1e-5, 1e5),
+        )
+        + WhiteKernel(
+            noise_level=1.0,
+            noise_level_bounds=(1e-5, 1e5),
+        )
     )
 
 
@@ -161,6 +169,7 @@ class BayesianRidgeSurrogate(
         max_iter: int = 300,
         tol: float = 1e-3,
         fit_intercept: bool = True,
+        use_internal_preprocessing: bool = True,
     ) -> None:
         # with_mean=False avoids densification if sparse fingerprint
         # matrices are introduced later.
@@ -178,6 +187,8 @@ class BayesianRidgeSurrogate(
             fit_intercept=fit_intercept,
         )
 
+        self.use_internal_preprocessing = use_internal_preprocessing
+
         self._is_fitted = False
 
     def fit(
@@ -185,9 +196,11 @@ class BayesianRidgeSurrogate(
         X: FloatArray,
         y: FloatArray,
     ) -> "BayesianRidgeSurrogate":
-        X_filtered = self.variance_filter.fit_transform(X)
-
-        X_scaled = self.scaler.fit_transform(X_filtered)
+        if self.use_internal_preprocessing:
+            X_filtered = self.variance_filter.fit_transform(X)
+            X_scaled = self.scaler.fit_transform(X_filtered)
+        else:
+            X_scaled = X
 
         self.model.fit(
             X_scaled,
@@ -204,9 +217,11 @@ class BayesianRidgeSurrogate(
     ) -> FloatArray:
         self._check_is_fitted()
 
-        X_filtered = self.variance_filter.transform(X)
-
-        X_scaled = self.scaler.transform(X_filtered)
+        if self.use_internal_preprocessing:
+            X_filtered = self.variance_filter.transform(X)
+            X_scaled = self.scaler.transform(X_filtered)
+        else:
+            X_scaled = X
 
         predictions = self.model.predict(
             X_scaled
@@ -223,9 +238,11 @@ class BayesianRidgeSurrogate(
     ) -> tuple[FloatArray, FloatArray]:
         self._check_is_fitted()
 
-        X_filtered = self.variance_filter.transform(X)
-
-        X_scaled = self.scaler.transform(X_filtered)
+        if self.use_internal_preprocessing:
+            X_filtered = self.variance_filter.transform(X)
+            X_scaled = self.scaler.transform(X_filtered)
+        else:
+            X_scaled = X
 
         mean_prediction, uncertainty = (
             self.model.predict(

@@ -1,6 +1,7 @@
 import argparse
 import json
 from datetime import datetime, timezone
+from hashlib import sha256
 from pathlib import Path
 
 import numpy as np
@@ -9,6 +10,17 @@ import yaml
 
 from src.chemistry.fingerprints import featurize_smiles
 from src.chemistry.descriptors import compute_basic_descriptors
+
+
+HISTORICAL_TARGETS_DIR = Path("data/processed/targets")
+
+
+def file_sha256(path):
+    digest = sha256()
+    with Path(path).open("rb") as handle:
+        for block in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
 
 
 def load_target_registry(path):
@@ -50,6 +62,7 @@ def prepare_target(
     output_base_dir,
     radius=2,
     n_bits=2048,
+    overwrite=False,
 ):
     registry = load_target_registry(registry_path)
 
@@ -67,13 +80,23 @@ def prepare_target(
         1000,
     )
 
-    df = pd.read_parquet(master_path)
-    target_df = filter_target(df, query, match= match)
+    output_base_dir = Path(output_base_dir)
+    if output_base_dir.resolve() == HISTORICAL_TARGETS_DIR.resolve():
+        raise ValueError(
+            "Refusing to overwrite historical v0.5.0 target artifacts; "
+            "use data/processed/v051/targets"
+        )
+    target_dir = output_base_dir / target
+    if target_dir.exists() and any(target_dir.iterdir()) and not overwrite:
+        raise FileExistsError(
+            f"Target output already exists: {target_dir}; pass overwrite=True"
+        )
 
+    df = pd.read_parquet(master_path)
+    target_df = filter_target(df, query, match=match)
     if target_df.empty:
         raise ValueError(f"No rows found for target '{target}' using query '{query}'.")
 
-    target_dir = Path(output_base_dir) / target
     target_dir.mkdir(parents=True, exist_ok=True)
 
     clean_path = target_dir / "clean.parquet"
@@ -118,9 +141,12 @@ def prepare_target(
     # Normalize the retained table identity to the exact canonical form stored
     # with the descriptors and fingerprints.
     retained_df["canonical_smiles"] = canonical_smiles
-    retained_df.to_parquet(clean_path, index=False)
 
     y = (affinity_values <= activity_threshold_nM).astype(int)
+    # The master-table label uses a generic threshold. Target artifacts must
+    # consistently use the target-specific threshold recorded in the registry.
+    retained_df["label"] = y
+    retained_df.to_parquet(clean_path, index=False)
     save_compressed_fingerprints(X_path, X, canonical_smiles)
     np.save(y_path, y)
 
@@ -133,6 +159,8 @@ def prepare_target(
 
     metadata = {
         "target": target,
+        "source_master_path": str(master_path),
+        "source_master_sha256": file_sha256(master_path),
         "query": query,
         "n_molecules_raw": int(len(target_df)),
         "n_molecules_valid": int(len(y)),
@@ -177,7 +205,7 @@ def parse_args():
     parser.add_argument("--target", required=True)
     parser.add_argument(
         "--master-path",
-        default="data/processed/bindingdb_clean_all.parquet",
+        default="data/processed/v051/bindingdb_clean_all.parquet",
     )
     parser.add_argument(
         "--registry-path",
@@ -185,10 +213,11 @@ def parse_args():
     )
     parser.add_argument(
         "--output-base-dir",
-        default="data/processed/targets",
+        default="data/processed/v051/targets",
     )
     parser.add_argument("--radius", type=int, default=2)
     parser.add_argument("--n-bits", type=int, default=2048)
+    parser.add_argument("--overwrite", action="store_true")
 
     return parser.parse_args()
 
@@ -203,6 +232,7 @@ def main():
         output_base_dir=args.output_base_dir,
         radius=args.radius,
         n_bits=args.n_bits,
+        overwrite=args.overwrite,
     )
 
 

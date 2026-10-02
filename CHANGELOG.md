@@ -1,3 +1,21 @@
+## [0.5.1] - Unreleased
+
+### Changed
+
+- Adopted `ConstantKernel * RationalQuadratic + WhiteKernel` as the v0.5.1
+  Gaussian-process covariance kernel. The original RBF GP produced
+  acquisition-relevant score ties in 163/400 controlled Uni-Mol rounds, with
+  1,223/4,000 selected molecules belonging to tied groups. Under otherwise
+  identical conditions, the Rational Quadratic diagnostic reduced this to
+  1/400 rounds and 10/4,000 selections. This was an acquisition-stability
+  decision; predictive and discovery performance were deliberately not used.
+- Retained the existing GP preprocessing, optimizer, noise `alpha`, UCB,
+  normalization, and deterministic tie policy. Rational Quadratic produced
+  optimizer/bound warnings in 270/400 diagnostic fits, primarily white-noise
+  lower-bound and kernel-alpha upper-bound behavior. These warnings were not
+  equivalent to acquisition collapse, and no further GP tuning was performed.
+
+
 ## [0.5.0] - 2026-09-29
 
 ### Added

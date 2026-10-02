@@ -23,6 +23,8 @@ from src.active_learning.factories import (
 )
 
 from src.regression.models import make_regression_surrogate
+from src.regression.representation_surrogates import make_representation_surrogate
+from src.data.partitions import PartitionManifest, validate_partition_manifest
 from src.regression.selection import (#legacy
     #select_greedy,                    #obsolete
     select_random,
@@ -117,7 +119,7 @@ def select_with_modular_engine(
 
 
 def run_regression_simulation(
-    X: np.ndarray,
+    X: np.ndarray | None,
     y: np.ndarray,
     strategy: str,
     qed: np.ndarray | None = None,
@@ -132,7 +134,51 @@ def run_regression_simulation(
     test_size: float = 0.2,
     candidate_pool_size: int = 100,
     beta: float | None = None,
+    X_model: np.ndarray | None = None,
+    X_morgan: np.ndarray | None = None,
+    representation_name: str = "morgan",
+    partition_manifest: PartitionManifest | None = None,
+    molecule_ids: np.ndarray | None = None,
 ) -> pd.DataFrame:
+
+    representation_aware = any(
+        value is not None
+        for value in (X_model, X_morgan, partition_manifest, molecule_ids)
+    )
+    if representation_aware:
+        if X_model is None or X_morgan is None:
+            raise ValueError(
+                "Representation-aware simulation requires both X_model and X_morgan"
+            )
+        if partition_manifest is None or molecule_ids is None:
+            raise ValueError(
+                "Representation-aware simulation requires a fixed partition manifest "
+                "and ordered molecule_ids"
+            )
+    else:
+        if X is None:
+            raise ValueError("Legacy Morgan simulation requires X")
+        X_model = X
+        X_morgan = X
+
+    X_model = np.asarray(X_model)
+    X_morgan = np.asarray(X_morgan)
+    y = np.asarray(y)
+    if X_model.ndim != 2 or X_morgan.ndim != 2:
+        raise ValueError("X_model and X_morgan must be two-dimensional matrices")
+    if not (len(X_model) == len(X_morgan) == len(y)):
+        raise ValueError(
+            "X_model, X_morgan, and y must describe the same number of molecules"
+        )
+    if representation_aware:
+        molecule_ids = np.asarray(molecule_ids)
+        if len(molecule_ids) != len(y):
+            raise ValueError("Ordered molecule_ids must align with simulation matrices")
+        validate_partition_manifest(partition_manifest, molecule_ids)
+        if partition_manifest.random_seed != random_state:
+            raise ValueError(
+                "Partition-manifest seed must match the simulation random_state"
+            )
 
     rng = np.random.default_rng(random_state)
 
@@ -162,7 +208,7 @@ def run_regression_simulation(
         canonical_smiles = np.asarray(canonical_smiles, dtype=str)
         qed = np.asarray(qed, dtype=float)
         if not (
-            len(X) == len(y) == len(qed) == len(affinity_nm) == len(canonical_smiles)
+            len(X_model) == len(y) == len(qed) == len(affinity_nm) == len(canonical_smiles)
         ):
             raise ValueError("Evaluation arrays must have identical molecular alignment.")
         if scaffolds is None:
@@ -172,17 +218,28 @@ def run_regression_simulation(
             if len(scaffolds) != len(y):
                 raise ValueError("Scaffolds must be aligned with the molecular arrays.")
 
-    pool_indices, test_indices = train_test_split(
-        np.arange(len(y)),
-        test_size=test_size,
-        random_state=random_state,
-    )
+    if representation_aware:
+        pool_indices = np.asarray(
+            partition_manifest.acquisition_pool_indices, dtype=int
+        )
+        test_indices = np.asarray(
+            partition_manifest.held_out_test_indices, dtype=int
+        )
+        labeled_indices = np.asarray(
+            partition_manifest.initial_labeled_indices, dtype=int
+        )
+    else:
+        pool_indices, test_indices = train_test_split(
+            np.arange(len(y)),
+            test_size=test_size,
+            random_state=random_state,
+        )
 
-    labeled_indices = rng.choice(
-        pool_indices,
-        size=min(n_initial, len(pool_indices)),
-        replace=False,
-    )
+        labeled_indices = rng.choice(
+            pool_indices,
+            size=min(n_initial, len(pool_indices)),
+            replace=False,
+        )
     initial_labeled_indices = labeled_indices.copy()
 
     unlabeled_indices = np.setdiff1d(
@@ -216,25 +273,32 @@ def run_regression_simulation(
             acquired_indices=initial_labeled_indices,
             affinity_nm=affinity_nm,
             qed=qed,
-            fingerprints=X,
+            fingerprints=X_morgan,
             scaffolds=scaffolds,
         )
 
     for round_idx in range(n_rounds + 1):
         round_start = time.perf_counter()
 
-        model = make_regression_surrogate(
-            model_name=model_name,
-            random_state=random_state + round_idx,
-        )
+        if representation_aware:
+            model = make_representation_surrogate(
+                model_name=model_name,
+                representation_name=representation_name,
+                random_state=random_state + round_idx,
+            )
+        else:
+            model = make_regression_surrogate(
+                model_name=model_name,
+                random_state=random_state + round_idx,
+            )
 
         model.fit(
-            X[labeled_indices],
+            X_model[labeled_indices],
             y[labeled_indices],
         )
 
         test_predictions = model.predict(
-            X[test_indices]
+            X_model[test_indices]
         )
 
         metrics = evaluate_regression(
@@ -327,7 +391,7 @@ def run_regression_simulation(
                 acquired_indices=cumulative_acquired,
                 affinity_nm=affinity_nm,
                 qed=qed,
-                fingerprints=X,
+                fingerprints=X_morgan,
                 scaffolds=scaffolds,
             )
             if round_idx > 0:
@@ -388,7 +452,7 @@ def run_regression_simulation(
 
         predicted_mean, predicted_uncertainty = (
             model.predict_with_uncertainty(
-                X[unlabeled_indices],
+                X_model[unlabeled_indices],
             )
         )
 
@@ -419,7 +483,7 @@ def run_regression_simulation(
                     unlabeled_indices=unlabeled_indices,
                     predicted_mean=predicted_mean,
                     predicted_uncertainty=predicted_uncertainty,
-                    X_pool=X[unlabeled_indices],
+                    X_pool=X_model[unlabeled_indices],
                     batch_size=batch_size,
                     beta=beta,
                 )
@@ -447,7 +511,7 @@ def run_regression_simulation(
                     unlabeled_indices=unlabeled_indices,
                     predicted_mean=predicted_mean,
                     predicted_uncertainty=predicted_uncertainty,
-                    X_pool=X[unlabeled_indices],
+                    X_pool=X_model[unlabeled_indices],
                 )
             )
             acquisition_result = WeightedAcquisitionResult(
@@ -458,7 +522,7 @@ def run_regression_simulation(
 
             if strategy in {"ucb_diversity", "ucb_qed_diversity"}:
                 selected = select_acquisition_diverse(
-                    X=X,
+                    X=X_morgan,
                     unlabeled_indices=unlabeled_indices,
                     labeled_indices=labeled_indices,
                     scores=scores,
@@ -486,7 +550,7 @@ def run_regression_simulation(
 
         elif strategy == "uncertainty_diverse":
             selected = select_uncertainty_diverse(
-                X,
+                X_morgan,
                 unlabeled_indices,
                 predicted_uncertainty,
                 batch_size,
@@ -639,4 +703,11 @@ def run_regression_simulation(
     result.attrs["test_indices"] = test_indices.copy()
     result.attrs["initial_labeled_indices"] = initial_labeled_indices
     result.attrs["acquired_batches"] = acquired_batches
+    result.attrs["representation_name"] = representation_name
+    result.attrs["model_feature_dimension"] = X_model.shape[1]
+    result.attrs["morgan_feature_dimension"] = X_morgan.shape[1]
+    result.attrs["partition_manifest_used"] = representation_aware
+    result.attrs["ordered_population_hash"] = (
+        partition_manifest.ordered_population_hash if representation_aware else None
+    )
     return result

@@ -4,6 +4,8 @@ import pytest
 from src.data.targets import load_target_regression
 from src.regression.selection import (
     acquisition_scores,
+    minmax_normalize,
+    normalized_ucb_scores,
     select_acquisition_diverse,
     select_acquisition_topk,
     select_ucb,
@@ -23,6 +25,43 @@ MODELS = [
     "bayesian_ridge",
     "gaussian_process",
 ]
+
+
+def test_constant_component_minmax_normalizes_to_finite_zeros():
+    normalized = minmax_normalize(np.full(7, 3.25))
+
+    np.testing.assert_array_equal(normalized, np.zeros(7))
+    assert np.isfinite(normalized).all()
+
+
+def test_nonconstant_minmax_normalization_is_unchanged():
+    values = np.array([-2.0, 0.0, 6.0, 2.0])
+    expected = (values - values.min()) / (values.max() - values.min())
+
+    np.testing.assert_array_equal(minmax_normalize(values), expected)
+
+
+def test_constant_pure_ucb_preserves_reverse_stable_tie_order():
+    indices = np.array([4, 8, 15, 16, 23, 42])
+    scores = normalized_ucb_scores(np.ones(6), np.ones(6))
+
+    np.testing.assert_array_equal(scores, np.zeros(6))
+    np.testing.assert_array_equal(
+        select_acquisition_topk(indices, scores, batch_size=3),
+        np.array([42, 23, 16]),
+    )
+
+
+def test_constant_ucb_leaves_qed_to_determine_composite_ranking():
+    indices = np.arange(4)
+    qed = np.array([0.2, 0.9, 0.5, 0.1])
+    combined = acquisition_scores(np.ones(4), np.ones(4), qed=qed)
+
+    np.testing.assert_array_equal(combined, 0.5 * qed)
+    np.testing.assert_array_equal(
+        select_acquisition_topk(indices, combined, batch_size=4),
+        np.array([1, 2, 0, 3]),
+    )
 
 
 def test_normalized_ucb_topk_preserves_original_candidate_ranking():

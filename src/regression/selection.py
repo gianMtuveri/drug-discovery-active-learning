@@ -34,6 +34,20 @@ def robust_scale(values: np.ndarray) -> np.ndarray:
     return (values - median) / scale
 
 
+def minmax_normalize(values: np.ndarray) -> np.ndarray:
+    """Min-max normalize one component, returning zero for no-information ties."""
+    values = np.asarray(values, dtype=float)
+    if values.ndim != 1:
+        raise ValueError("minmax_normalize expects a one-dimensional array.")
+    if not np.isfinite(values).all():
+        raise ValueError("minmax_normalize requires finite values.")
+    minimum = np.min(values)
+    value_range = np.max(values) - minimum
+    if np.isclose(value_range, 0.0):
+        return np.zeros_like(values, dtype=float)
+    return (values - minimum) / value_range
+
+
 def select_random(
     unlabeled_indices: np.ndarray,
     batch_size: int,
@@ -142,7 +156,7 @@ def normalized_ucb_scores(
         raise ValueError("UCB inputs must have equal length.")
 
     raw_ucb = robust_scale(predicted_affinity) + beta * robust_scale(uncertainty)
-    return (raw_ucb - np.min(raw_ucb)) / (np.max(raw_ucb) - np.min(raw_ucb))
+    return minmax_normalize(raw_ucb)
 
 
 def acquisition_scores(

@@ -324,6 +324,127 @@ affinity-only discovery, joint affinity/QED discovery, joint-discovery curve
 AUC, qualifying Bemis–Murcko scaffold count and pairwise Tanimoto diversity.
 The experimental joint criterion is affinity ≤ 500 nM and QED ≥ 0.6.
 
+### v0.5.1 molecular representation benchmark
+
+Version 0.5.1 evaluated how the surrogate input representation affects
+prediction and experimental prioritisation under an otherwise fixed EGFR
+active-learning protocol. The four representations were:
+
+- Morgan fingerprints (radius 2, 2,048 bits);
+- eight RDKit physicochemical descriptors;
+- frozen SMI-TED Light molecular embeddings;
+- frozen Uni-Mol v1 molecular embeddings.
+
+Random Forest, Bayesian Ridge and Gaussian Process surrogates were evaluated
+with UCB, UCB + QED, UCB + diversity and UCB + QED + diversity. Morgan
+fingerprints remained the common chemical-distance representation for all
+diversity calculations, irrespective of the representation supplied to the
+surrogate.
+
+The benchmark used a common population of 13,983 corrected EGFR molecules,
+20 fixed seed-specific partitions, 20 initially labelled molecules, 20
+active-learning rounds and 10 acquisitions per round. Identical partitions
+were used across representations. All 960 campaigns completed successfully,
+with zero failed campaigns.
+
+#### Final-round descriptive results
+
+Values below are final-round means across 20 seeds. Deltas are relative to
+Morgan within the same surrogate model and acquisition strategy. Lower RMSE
+is better. Joint discoveries satisfy experimental affinity ≤ 500 nM and QED
+≥ 0.6; joint scaffolds are distinct Bemis–Murcko scaffolds among those
+discoveries. These are descriptive means, not significance-tested rankings.
+
+| Model | Acquisition | Representation | RMSE | Δ RMSE vs Morgan | Joint discoveries | Δ joint discoveries | Joint scaffolds | Δ joint scaffolds |
+|---|---|---|---:|---:|---:|---:|---:|---:|
+| Random Forest | UCB | Morgan | 1.259 | +0.000 | 9.75 | +0.00 | 6.75 | +0.00 |
+| Random Forest | UCB | RDKit descriptors | 1.378 | +0.119 | 7.70 | -2.05 | 5.05 | -1.70 |
+| Random Forest | UCB | SMI-TED Light | 1.267 | +0.009 | 15.50 | +5.75 | 9.05 | +2.30 |
+| Random Forest | UCB | Uni-Mol v1 | 1.345 | +0.086 | 20.50 | +10.75 | 8.90 | +2.15 |
+| Random Forest | UCB + QED | Morgan | 1.340 | +0.000 | 55.60 | +0.00 | 28.70 | +0.00 |
+| Random Forest | UCB + QED | RDKit descriptors | 1.398 | +0.059 | 41.95 | -13.65 | 23.30 | -5.40 |
+| Random Forest | UCB + QED | SMI-TED Light | 1.285 | -0.055 | 65.05 | +9.45 | 29.05 | +0.35 |
+| Random Forest | UCB + QED | Uni-Mol v1 | 1.361 | +0.022 | 46.95 | -8.65 | 23.45 | -5.25 |
+| Random Forest | UCB + diversity | Morgan | 1.184 | +0.000 | 11.30 | +0.00 | 10.00 | +0.00 |
+| Random Forest | UCB + diversity | RDKit descriptors | 1.381 | +0.196 | 7.30 | -4.00 | 6.55 | -3.45 |
+| Random Forest | UCB + diversity | SMI-TED Light | 1.255 | +0.071 | 15.35 | +4.05 | 11.85 | +1.85 |
+| Random Forest | UCB + diversity | Uni-Mol v1 | 1.349 | +0.165 | 10.00 | -1.30 | 7.75 | -2.25 |
+| Random Forest | UCB + QED + diversity | Morgan | 1.297 | +0.000 | 48.85 | +0.00 | 37.00 | +0.00 |
+| Random Forest | UCB + QED + diversity | RDKit descriptors | 1.415 | +0.117 | 32.90 | -15.95 | 28.35 | -8.65 |
+| Random Forest | UCB + QED + diversity | SMI-TED Light | 1.294 | -0.004 | 52.95 | +4.10 | 36.45 | -0.55 |
+| Random Forest | UCB + QED + diversity | Uni-Mol v1 | 1.365 | +0.067 | 42.40 | -6.45 | 33.15 | -3.85 |
+| Bayesian Ridge | UCB | Morgan | 1.276 | +0.000 | 1.45 | +0.00 | 1.45 | +0.00 |
+| Bayesian Ridge | UCB | RDKit descriptors | 1.603 | +0.327 | 3.40 | +1.95 | 3.10 | +1.65 |
+| Bayesian Ridge | UCB | SMI-TED Light | 1.316 | +0.039 | 3.65 | +2.20 | 3.60 | +2.15 |
+| Bayesian Ridge | UCB | Uni-Mol v1 | 1.347 | +0.071 | 6.75 | +5.30 | 6.20 | +4.75 |
+| Bayesian Ridge | UCB + QED | Morgan | 1.304 | +0.000 | 26.70 | +0.00 | 23.25 | +0.00 |
+| Bayesian Ridge | UCB + QED | RDKit descriptors | 1.632 | +0.328 | 7.15 | -19.55 | 6.50 | -16.75 |
+| Bayesian Ridge | UCB + QED | SMI-TED Light | 1.293 | -0.012 | 14.75 | -11.95 | 14.00 | -9.25 |
+| Bayesian Ridge | UCB + QED | Uni-Mol v1 | 1.357 | +0.053 | 16.10 | -10.60 | 14.70 | -8.55 |
+| Bayesian Ridge | UCB + diversity | Morgan | 1.247 | +0.000 | 3.10 | +0.00 | 3.10 | +0.00 |
+| Bayesian Ridge | UCB + diversity | RDKit descriptors | 1.585 | +0.338 | 3.95 | +0.85 | 3.90 | +0.80 |
+| Bayesian Ridge | UCB + diversity | SMI-TED Light | 1.292 | +0.045 | 4.20 | +1.10 | 4.20 | +1.10 |
+| Bayesian Ridge | UCB + diversity | Uni-Mol v1 | 1.339 | +0.092 | 7.55 | +4.45 | 7.05 | +3.95 |
+| Bayesian Ridge | UCB + QED + diversity | Morgan | 1.335 | +0.000 | 31.45 | +0.00 | 31.40 | +0.00 |
+| Bayesian Ridge | UCB + QED + diversity | RDKit descriptors | 1.694 | +0.359 | 10.45 | -21.00 | 9.85 | -21.55 |
+| Bayesian Ridge | UCB + QED + diversity | SMI-TED Light | 1.286 | -0.049 | 23.50 | -7.95 | 23.30 | -8.10 |
+| Bayesian Ridge | UCB + QED + diversity | Uni-Mol v1 | 1.343 | +0.008 | 17.30 | -14.15 | 16.40 | -15.00 |
+| Gaussian Process | UCB | Morgan | 1.211 | +0.000 | 1.20 | +0.00 | 1.00 | +0.00 |
+| Gaussian Process | UCB | RDKit descriptors | 1.385 | +0.174 | 4.10 | +2.90 | 3.00 | +2.00 |
+| Gaussian Process | UCB | SMI-TED Light | 1.258 | +0.047 | 5.85 | +4.65 | 5.40 | +4.40 |
+| Gaussian Process | UCB | Uni-Mol v1 | 1.326 | +0.115 | 7.50 | +6.30 | 6.95 | +5.95 |
+| Gaussian Process | UCB + QED | Morgan | 1.264 | +0.000 | 43.80 | +0.00 | 39.30 | +0.00 |
+| Gaussian Process | UCB + QED | RDKit descriptors | 1.422 | +0.158 | 40.30 | -3.50 | 32.60 | -6.70 |
+| Gaussian Process | UCB + QED | SMI-TED Light | 1.259 | -0.005 | 50.15 | +6.35 | 42.90 | +3.60 |
+| Gaussian Process | UCB + QED | Uni-Mol v1 | 1.337 | +0.073 | 30.90 | -12.90 | 26.85 | -12.45 |
+| Gaussian Process | UCB + diversity | Morgan | 1.206 | +0.000 | 2.80 | +0.00 | 2.35 | +0.00 |
+| Gaussian Process | UCB + diversity | RDKit descriptors | 1.372 | +0.166 | 4.35 | +1.55 | 4.25 | +1.90 |
+| Gaussian Process | UCB + diversity | SMI-TED Light | 1.251 | +0.046 | 7.25 | +4.45 | 7.25 | +4.90 |
+| Gaussian Process | UCB + diversity | Uni-Mol v1 | 1.324 | +0.118 | 7.45 | +4.65 | 7.10 | +4.75 |
+| Gaussian Process | UCB + QED + diversity | Morgan | 1.279 | +0.000 | 45.90 | +0.00 | 45.15 | +0.00 |
+| Gaussian Process | UCB + QED + diversity | RDKit descriptors | 1.389 | +0.111 | 19.30 | -26.60 | 18.60 | -26.55 |
+| Gaussian Process | UCB + QED + diversity | SMI-TED Light | 1.267 | -0.012 | 42.05 | -3.85 | 39.80 | -5.35 |
+| Gaussian Process | UCB + QED + diversity | Uni-Mol v1 | 1.339 | +0.060 | 27.50 | -18.40 | 25.70 | -19.45 |
+
+#### EGFR observation and frozen next-phase configurations
+
+SMI-TED Light with Random Forest showed a particularly strong discovery
+profile on EGFR. With UCB + QED it produced mean RMSE 1.285, 65.05 joint
+discoveries and 29.05 joint scaffolds. With UCB + QED + diversity it produced
+mean RMSE 1.294, 52.95 joint discoveries and 36.45 joint scaffolds. The
+diversity term therefore reduced mean joint-discovery yield on EGFR while
+increasing scaffold coverage; neither strategy is assumed to be universally
+superior.
+
+Version 0.5.1 freezes four configurations for the next multi-target benchmark:
+
+- Morgan + Random Forest + UCB + QED;
+- Morgan + Random Forest + UCB + QED + diversity;
+- SMI-TED Light + Random Forest + UCB + QED;
+- SMI-TED Light + Random Forest + UCB + QED + diversity.
+
+Random Forest is frozen as the surrogate. SMI-TED is carried forward because
+of its strong EGFR discovery profile, while Morgan/ECFP-like fingerprints are
+retained as the classical representation reference. Both acquisition
+strategies are retained to test the trade-off between discovery yield and
+scaffold coverage. UCB + QED + diversity is of particular interest for
+scaffold-oriented discovery, but the multi-target benchmark will determine
+whether the EGFR trade-off generalizes.
+
+The next phase is a **prospective-in-design retrospective benchmark**: these
+four configurations are frozen before evaluating additional targets and must
+not be re-selected or tuned independently for each target.
+
+#### Scope and limitations
+
+- Official SMI-TED preprocessing removes stereochemical information.
+- Uni-Mol's no-hydrogen preprocessing removes all atomic-number-1 atoms,
+  including isotopic hydrogen; deuterium identity is therefore not represented.
+- Representation effects interacted with both surrogate model and acquisition
+  strategy in the EGFR benchmark.
+- EGFR alone is insufficient to establish cross-target robustness, motivating
+  the planned multi-target benchmark.
+
 ---
 
 # Evaluation philosophy
@@ -507,8 +628,14 @@ additional measures of novelty, developability and chemical diversity.
 
 # References
 
-1. Reker D. *Practical considerations for active machine learning in drug discovery.*
+1. Reker D. *Practical considerations for active machine learning in drug discovery.* Drug Discovery Today: Technologies. 2019;32–33:73–79. https://doi.org/10.1016/j.ddtec.2020.06.001
 
-2. Wang Y. *The present state and challenges of active learning in drug discovery.*
+2. Wang L, Zhou Z, Yang X, Shi S, Zeng X, Cao D. *The present state and challenges of active learning in drug discovery.* Drug Discovery Today. 2024;29(6):103985. https://doi.org/10.1016/j.drudis.2024.103985
 
-3. Masood K. *Molecular property prediction using pretrained BERT and Bayesian active learning.*
+3. Masood MA, Kaski S, Cui T. *Molecular property prediction using pretrained-BERT and Bayesian active learning: a data-efficient approach to drug design.* Journal of Cheminformatics. 2025;17:58. https://doi.org/10.1186/s13321-025-00986-6
+
+4. Dodds M, Guo J, Löhr T, Tibo A, Engkvist O, Janet JP. *Sample efficient reinforcement learning with active learning for molecular design.* Chemical Science. 2024;15:4146–4160. https://doi.org/10.1039/D3SC04653B
+
+5. Srivastava SP, Gorantla R, Chundru SK, Winkelman CJR, Mey ASJS, Singh RK. *Explainable active learning framework for ligand binding affinity prediction.* Digital Discovery. 2026;5:769–779. https://doi.org/10.1039/D5DD00436E
+
+6. Wang S, Allauzen A, Nghe P, Opuu V. *A guide for active learning in synergistic drug discovery.* Scientific Reports. 2025;15:3484. https://doi.org/10.1038/s41598-025-85600-3
